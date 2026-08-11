@@ -63,13 +63,18 @@ find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp REQUIRED)
 set(TMD_TM_SOURCES
     src/tm/tm-signer.cpp
     src/tm/tm-types.cpp
+    src/tm/tm-events.cpp
     src/tm/http-client.cpp
     src/tm/tm-api-client.cpp
+    src/tm/field-set-socket.cpp
 )
+
+# FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
+find_package(Threads REQUIRED)
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES})
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR})
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
@@ -90,9 +95,19 @@ if(ENABLE_TESTS)
   # the mock on an ephemeral port, runs this binary against it, and shuts it
   # down, so the test is hermetic and needs no TM, no LAN, and no credentials.
   add_executable(test-tm-client test/test-tm-client.cpp ${TMD_TM_SOURCES})
-  target_link_libraries(test-tm-client PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl)
+  target_link_libraries(test-tm-client PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
   target_include_directories(test-tm-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${NLOHMANN_JSON_INCLUDE_DIR})
   set_target_properties(test-tm-client PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+
+  # Same idea one layer up: the mock speaks RFC 6455 by hand, so this exercises
+  # the real handshake, the real framing, and a real yanked connection.
+  add_executable(test-field-set-socket test/test-field-set-socket.cpp ${TMD_TM_SOURCES})
+  target_link_libraries(test-field-set-socket PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
+  target_include_directories(
+    test-field-set-socket
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${NLOHMANN_JSON_INCLUDE_DIR}
+  )
+  set_target_properties(test-field-set-socket PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
   find_program(NODE_EXECUTABLE NAMES node)
   if(NODE_EXECUTABLE)
@@ -102,15 +117,28 @@ if(ENABLE_TESTS)
               "$<TARGET_FILE:test-tm-client>"
     )
 
+    # The mock is the oracle every integration test is judged against, so it is
+    # tested first and on its own. Pure Node: no curl DLL, no PATH fixup.
+    add_test(
+      NAME mock-server
+      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/test-mock-server.mjs"
+    )
+
+    add_test(
+      NAME field-set-socket
+      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/run-socket-test.mjs"
+              "$<TARGET_FILE:test-field-set-socket>"
+    )
+
     # obs-deps ships libcurl as a DLL. Without its directory on PATH the test
     # binary fails to start at all, which shows up as a silent non-zero exit with
     # no output rather than anything resembling a helpful error.
     get_filename_component(TMD_DEPS_PREFIX "${CURL_DIR}/../../.." ABSOLUTE)
     set_tests_properties(
-      tm-client
+      tm-client field-set-socket
       PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${TMD_DEPS_PREFIX}/bin"
     )
   else()
-    message(WARNING "node not found: skipping the tm-client integration test")
+    message(WARNING "node not found: skipping the tm-client and field-set-socket integration tests")
   endif()
 endif()

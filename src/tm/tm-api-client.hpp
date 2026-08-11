@@ -97,6 +97,15 @@ public:
 	/// Called automatically by every request; exposed for Test Connection.
 	TmError ensureToken(std::string &detail);
 
+	/// Ensures a token is held and hands back a copy of it.
+	///
+	/// This is what a FieldSetSocket::TokenProvider calls: the websocket upgrade
+	/// needs the same bearer token as a REST call, and sharing one client means
+	/// one token for the whole plugin rather than one per socket. The caller is
+	/// responsible for serialising access, since this client is not thread-safe
+	/// and the socket runs on its own thread.
+	TmError acquireToken(std::string &token, std::string &detail);
+
 	/// Performs a signed GET of an absolute API path such as "/api/event".
 	/// Pass the previous response's Last-Modified to get a cheap 304.
 	TmRawResult getRaw(const std::string &path, const std::string &ifModifiedSince = {});

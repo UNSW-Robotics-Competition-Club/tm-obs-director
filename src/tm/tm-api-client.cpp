@@ -242,6 +242,16 @@ TmError TmApiClient::ensureToken(std::string &detail)
 	return TmError::None;
 }
 
+TmError TmApiClient::acquireToken(std::string &token, std::string &detail)
+{
+	const TmError error = ensureToken(detail);
+	if (error != TmError::None)
+		return error;
+
+	token = token_;
+	return TmError::None;
+}
+
 TmError TmApiClient::classify(const HttpResponse &response, std::string &detail) const
 {
 	if (response.transportFailed) {

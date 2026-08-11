@@ -15,7 +15,7 @@
 // button must tell apart. See SCENARIOS below.
 
 import { createServer } from "node:http";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { sign } from "./tm-sign.mjs";
 
 // ---------------------------------------------------------------------------
@@ -232,6 +232,115 @@ function routeApi(pathname) {
 	return null;
 }
 
+// ---------------------------------------------------------------------------
+// WebSocket
+//
+// Node ships a WebSocket *client* but no server, and the whole point of this
+// mock is to have no dependencies, so the handshake and RFC 6455 framing are
+// done by hand below. It is less code than it looks: TM's messages are small
+// text frames, and the only wire subtleties that matter are the accept-key
+// digest and unmasking client frames.
+// ---------------------------------------------------------------------------
+
+const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+const OPCODE = { CONTINUATION: 0x0, TEXT: 0x1, BINARY: 0x2, CLOSE: 0x8, PING: 0x9, PONG: 0xa };
+
+/// Guards the frame decoder against a client claiming an absurd payload length.
+const MAX_FRAME_BYTES = 1 << 20;
+
+function websocketAccept(key) {
+	return createHash("sha1").update(key + WS_GUID).digest("base64");
+}
+
+/// Encodes one complete server-to-server frame. Server frames are never masked.
+function encodeFrame(payload, opcode = OPCODE.TEXT) {
+	const data = Buffer.isBuffer(payload) ? payload : Buffer.from(payload, "utf8");
+
+	let header;
+	if (data.length < 126) {
+		header = Buffer.alloc(2);
+		header[1] = data.length;
+	} else if (data.length < 65536) {
+		header = Buffer.alloc(4);
+		header[1] = 126;
+		header.writeUInt16BE(data.length, 2);
+	} else {
+		header = Buffer.alloc(10);
+		header[1] = 127;
+		header.writeBigUInt64BE(BigInt(data.length), 2);
+	}
+	header[0] = 0x80 | opcode; // FIN
+
+	return Buffer.concat([header, data]);
+}
+
+/// Incremental frame decoder. Feeds whole messages to `handlers.message`.
+///
+/// It enforces the rule that client-to-server frames must be masked. That is not
+/// pedantry: it is a free check that our libcurl client speaks the protocol
+/// properly, and an unmasked frame would sail past a laxer decoder.
+function createFrameDecoder(handlers) {
+	let pending = Buffer.alloc(0);
+	let message = Buffer.alloc(0);
+
+	return function feed(chunk) {
+		pending = Buffer.concat([pending, chunk]);
+
+		for (;;) {
+			if (pending.length < 2) return;
+
+			const fin = (pending[0] & 0x80) !== 0;
+			const opcode = pending[0] & 0x0f;
+			const masked = (pending[1] & 0x80) !== 0;
+
+			let length = pending[1] & 0x7f;
+			let offset = 2;
+
+			if (length === 126) {
+				if (pending.length < offset + 2) return;
+				length = pending.readUInt16BE(offset);
+				offset += 2;
+			} else if (length === 127) {
+				if (pending.length < offset + 8) return;
+				const wide = pending.readBigUInt64BE(offset);
+				if (wide > BigInt(MAX_FRAME_BYTES)) return handlers.protocolError("frame too large");
+				length = Number(wide);
+				offset += 8;
+			}
+
+			if (length > MAX_FRAME_BYTES) return handlers.protocolError("frame too large");
+
+			if (!masked) return handlers.protocolError("client frame was not masked");
+
+			if (pending.length < offset + 4) return;
+			const mask = pending.subarray(offset, offset + 4);
+			offset += 4;
+
+			if (pending.length < offset + length) return;
+
+			const payload = Buffer.from(pending.subarray(offset, offset + length));
+			for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
+
+			pending = pending.subarray(offset + length);
+
+			if (opcode === OPCODE.CLOSE) return handlers.close();
+			if (opcode === OPCODE.PING) {
+				handlers.ping(payload);
+				continue;
+			}
+			if (opcode === OPCODE.PONG) continue;
+
+			message = Buffer.concat([message, payload]);
+			if (fin) {
+				const complete = message;
+				message = Buffer.alloc(0);
+				handlers.message(complete.toString("utf8"));
+			}
+		}
+	};
+}
+
 function sendJson(res, status, body, extraHeaders = {}) {
 	const payload = JSON.stringify(body);
 	res.writeHead(status, {
@@ -343,7 +452,176 @@ export function createMockServer({ scenario = "ok", log = true } = {}) {
 		return sendJson(res, 200, body, { "Last-Modified": LAST_MODIFIED.toUTCString() });
 	});
 
-	return { server, requests };
+	// --- Field set websocket ------------------------------------------------
+	//
+	// ws://{server}/api/fieldsets/{id}, upgraded with the same three auth
+	// headers as a REST call. The upgrade is authorised through exactly the same
+	// authorise() used above, so a client that can sign a GET can open a socket
+	// and a client that cannot, cannot.
+
+	const clients = new Set();
+	const commands = []; // every {cmd:...} the client sent, in order
+	const connections = []; // one entry per accepted upgrade
+	const clientWaiters = [];
+
+	function broadcast(payload) {
+		const frame = encodeFrame(typeof payload === "string" ? payload : JSON.stringify(payload));
+		for (const client of clients) client.write(frame);
+		return clients.size;
+	}
+
+	server.on("upgrade", (req, socket) => {
+		const url = new URL(req.url, `http://${req.headers["host"] ?? "localhost"}`);
+		requests.push({ method: req.method, path: url.pathname, headers: { ...req.headers }, upgrade: true });
+
+		const trace = (status, note) => {
+			if (log) console.log(`  UPGRADE ${url.pathname} -> ${status}${note ? ` (${note})` : ""}`);
+		};
+
+		// No response object on an upgrade, so the status line is written by hand.
+		// end() rather than destroy(): destroying can discard the bytes we just
+		// wrote, and then the client sees a dropped connection instead of the
+		// status code that explains why it was refused.
+		const refuse = (status, text, note) => {
+			trace(status, note);
+			socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+		};
+
+		const match = url.pathname.match(/^\/api\/fieldsets\/(\d+)$/);
+		if (!match) return refuse(404, "Not Found", "no such field set socket");
+
+		const fieldSetId = Number(match[1]);
+		if (!FIELDS[fieldSetId]) return refuse(404, "Not Found", "unknown field set");
+
+		if (scenario === "api-disabled") return refuse(404, "Not Found", "Local TM API not enabled");
+		if (scenario === "clock-skew") return refuse(401, "Unauthorized", "clock_skew");
+
+		const denial = authorise(req, scenario);
+		if (denial) return refuse(denial.status, "Unauthorized", denial.code);
+
+		const key = req.headers["sec-websocket-key"];
+		if (!key) return refuse(400, "Bad Request", "no Sec-WebSocket-Key");
+
+		socket.write(
+			"HTTP/1.1 101 Switching Protocols\r\n" +
+				"Upgrade: websocket\r\n" +
+				"Connection: Upgrade\r\n" +
+				`Sec-WebSocket-Accept: ${websocketAccept(key)}\r\n\r\n`,
+		);
+		socket.setNoDelay(true);
+		trace(101, `field set ${fieldSetId}`);
+
+		clients.add(socket);
+		connections.push({ fieldSetId, at: Date.now() });
+
+		const feed = createFrameDecoder({
+			message(text) {
+				let parsed;
+				try {
+					parsed = JSON.parse(text);
+				} catch {
+					if (log) console.log(`  ws <- unparseable: ${text}`);
+					return;
+				}
+				if (log) console.log(`  ws <- ${text}`);
+				commands.push(parsed);
+
+				// Real TM announces the change to every listener rather than
+				// answering the sender privately, so the plugin learns about a
+				// display change it did not make. Mirror that.
+				if (parsed.cmd === "setAudienceDisplay" && parsed.display) {
+					broadcast({ type: "audienceDisplayChanged", display: parsed.display });
+				}
+			},
+			ping(payload) {
+				socket.write(encodeFrame(payload, OPCODE.PONG));
+			},
+			close() {
+				socket.write(encodeFrame(Buffer.alloc(0), OPCODE.CLOSE));
+				socket.end();
+			},
+			protocolError(reason) {
+				if (log) console.log(`  ws protocol error: ${reason}`);
+				socket.destroy();
+			},
+		});
+
+		socket.on("data", feed);
+		socket.on("error", () => clients.delete(socket));
+		socket.on("close", () => clients.delete(socket));
+
+		for (const resolve of clientWaiters.splice(0)) resolve();
+	});
+
+	const fieldset = {
+		get clientCount() {
+			return clients.size;
+		},
+
+		/// Every command the client has sent, oldest first.
+		commands,
+
+		/// One entry per accepted upgrade. Length > 1 means the client reconnected.
+		connections,
+
+		/// Pushes one event to every connected client. Returns how many got it.
+		emit(event) {
+			return broadcast(event);
+		},
+
+		/// Yanks the TCP connection with no close frame — what a TM restart, a
+		/// yanked network cable, or a sleeping laptop looks like. This is the
+		/// case reconnect logic actually has to survive.
+		dropAll() {
+			for (const client of clients) client.destroy();
+			clients.clear();
+		},
+
+		/// Polite shutdown with a close frame.
+		closeAll() {
+			for (const client of clients) {
+				client.write(encodeFrame(Buffer.alloc(0), OPCODE.CLOSE));
+				client.end();
+			}
+			clients.clear();
+		},
+
+		/// Resolves once a client is attached. Resolves immediately if one
+		/// already is, so there is no race between connecting and waiting.
+		waitForClient(timeoutMs = 10000) {
+			if (clients.size > 0) return Promise.resolve();
+			return new Promise((resolve, reject) => {
+				const timer = setTimeout(
+					() => reject(new Error(`no websocket client after ${timeoutMs}ms`)),
+					timeoutMs,
+				);
+				clientWaiters.push(() => {
+					clearTimeout(timer);
+					resolve();
+				});
+			});
+		},
+	};
+
+	return { server, requests, fieldset };
+}
+
+/// The event sequence one match produces, in order. Used by the --cycle CLI
+/// option and by the socket integration test, so both exercise the same script.
+export function matchCycle({ fieldId = 1, matchNumber = 1, round = "QUAL", division = 1 } = {}) {
+	return [
+		{
+			type: "fieldMatchAssigned",
+			fieldID: fieldId,
+			match: { division, session: 0, round, match: matchNumber, instance: 1 },
+		},
+		{ type: "fieldActivated", fieldID: fieldId },
+		{ type: "audienceDisplayChanged", display: "INTRO" },
+		{ type: "matchStarted", fieldID: fieldId },
+		{ type: "audienceDisplayChanged", display: "IN_MATCH" },
+		{ type: "matchStopped", fieldID: fieldId },
+		{ type: "audienceDisplayChanged", display: "RESULTS" },
+	];
 }
 
 // ---------------------------------------------------------------------------
@@ -351,10 +629,11 @@ export function createMockServer({ scenario = "ok", log = true } = {}) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-	const args = { port: 8080, scenario: "ok" };
+	const args = { port: 8080, scenario: "ok", cycle: 0 };
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--port") args.port = Number(argv[++i]);
 		else if (argv[i] === "--scenario") args.scenario = argv[++i];
+		else if (argv[i] === "--cycle") args.cycle = Number(argv[++i] ?? 20);
 		else if (argv[i] === "--help") args.help = true;
 	}
 	return args;
@@ -366,18 +645,37 @@ if (isMain) {
 	const args = parseArgs(process.argv.slice(2));
 
 	if (args.help) {
-		console.log("Usage: node test/mock-tm-server.mjs [--port N] [--scenario NAME]\n\nScenarios:");
+		console.log(
+			"Usage: node test/mock-tm-server.mjs [--port N] [--scenario NAME] [--cycle SECONDS]\n\n" +
+				"  --cycle SECONDS  replay a full match event sequence every SECONDS, so OBS can\n" +
+				"                   be driven by hand without a real event running\n\nScenarios:",
+		);
 		for (const [name, description] of Object.entries(SCENARIOS)) {
 			console.log(`  ${name.padEnd(14)} ${description}`);
 		}
 		process.exit(0);
 	}
 
-	const { server } = createMockServer({ scenario: args.scenario });
+	const { server, fieldset } = createMockServer({ scenario: args.scenario });
 	server.listen(args.port, () => {
 		console.log(`Mock TM API on http://127.0.0.1:${args.port}  scenario=${args.scenario}`);
 		console.log(`  client id     ${CLIENT_ID}`);
 		console.log(`  client secret ${CLIENT_SECRET}`);
 		console.log(`  TM API key    ${API_KEY}`);
+		console.log(`  field set ws  ws://127.0.0.1:${args.port}/api/fieldsets/1`);
 	});
+
+	if (args.cycle > 0) {
+		let matchNumber = 1;
+		const runCycle = async () => {
+			if (fieldset.clientCount === 0) return;
+			console.log(`  -- match cycle: QUAL ${matchNumber}`);
+			for (const event of matchCycle({ matchNumber })) {
+				fieldset.emit(event);
+				await new Promise((resolve) => setTimeout(resolve, (args.cycle * 1000) / 8));
+			}
+			matchNumber++;
+		};
+		setInterval(runCycle, args.cycle * 1000);
+	}
 }
