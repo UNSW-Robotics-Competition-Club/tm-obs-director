@@ -96,13 +96,25 @@ set_property(
     "TMD_BUILD_VERSION=\"${PROJECT_VERSION}\""
 )
 
+# The engine holds the decisions: what state the field set is in, which scene an
+# event calls for, and when the switch actually happens. Like the TM client it
+# stays free of libobs and Qt, so all of that is testable against a fake clock
+# rather than against a stopwatch and a running OBS.
+set(TMD_ENGINE_SOURCES src/engine/fieldset-state.cpp src/engine/rules.cpp src/engine/scheduler.cpp)
+
 # FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
 find_package(Threads REQUIRED)
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES})
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES} ${TMD_ENGINE_SOURCES}
+)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR})
+target_include_directories(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
@@ -113,17 +125,32 @@ if(ENABLE_TESTS)
 
   add_executable(test-signer test/test-signer.cpp src/tm/tm-signer.cpp)
   target_link_libraries(test-signer PRIVATE ${TMD_CRYPTO_LIBS})
-  target_include_directories(test-signer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(test-signer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src")
   set_target_properties(test-signer PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
   add_test(NAME signer COMMAND test-signer)
+
+  # The engine needs nothing but a compiler: no mock server, no network, no
+  # clock. It is the cheapest test in the suite and the one that covers the
+  # inference TM's wire protocol forces on us.
+  add_executable(test-engine test/test-engine.cpp ${TMD_ENGINE_SOURCES} src/tm/tm-types.cpp)
+  target_include_directories(
+    test-engine
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src" ${NLOHMANN_JSON_INCLUDE_DIR}
+  )
+  set_target_properties(test-engine PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+
+  add_test(NAME engine COMMAND test-engine)
 
   # Exercises the client against test/mock-tm-server.mjs. The Node runner starts
   # the mock on an ephemeral port, runs this binary against it, and shuts it
   # down, so the test is hermetic and needs no TM, no LAN, and no credentials.
   add_executable(test-tm-client test/test-tm-client.cpp ${TMD_TM_SOURCES})
   target_link_libraries(test-tm-client PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
-  target_include_directories(test-tm-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${NLOHMANN_JSON_INCLUDE_DIR})
+  target_include_directories(
+    test-tm-client
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src" ${NLOHMANN_JSON_INCLUDE_DIR}
+  )
   set_target_properties(test-tm-client PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
   # Same idea one layer up: the mock speaks RFC 6455 by hand, so this exercises
@@ -132,7 +159,7 @@ if(ENABLE_TESTS)
   target_link_libraries(test-field-set-socket PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
   target_include_directories(
     test-field-set-socket
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${NLOHMANN_JSON_INCLUDE_DIR}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src" ${NLOHMANN_JSON_INCLUDE_DIR}
   )
   set_target_properties(test-field-set-socket PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
