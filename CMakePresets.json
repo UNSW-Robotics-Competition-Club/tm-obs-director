@@ -10,8 +10,8 @@
       "name": "template",
       "hidden": true,
       "cacheVariables": {
-        "ENABLE_FRONTEND_API": false,
-        "ENABLE_QT": false
+        "ENABLE_FRONTEND_API": true,
+        "ENABLE_QT": true
       }
     },
     {
@@ -141,6 +141,24 @@
       "displayName": "Ubuntu x86_64 CI",
       "description": "Ubuntu CI build for x86_64",
       "configuration": "RelWithDebInfo"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-x64",
+      "configurePreset": "windows-x64",
+      "displayName": "Windows x64",
+      "description": "Run the TM client and engine tests",
+      "configuration": "RelWithDebInfo",
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "ubuntu-x86_64",
+      "configurePreset": "ubuntu-x86_64",
+      "displayName": "Ubuntu x86_64",
+      "description": "Run the TM client and engine tests",
+      "configuration": "RelWithDebInfo",
+      "output": {"outputOnFailure": true}
     }
   ]
 }
