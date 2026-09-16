@@ -64,16 +64,29 @@ it is not a secret this file protects.
 Requires CMake 3.28+, and on Windows Visual Studio 2022 (Build Tools are enough).
 Dependencies are fetched by the project itself; nothing needs installing first.
 
+Put the sign-in key in a file named `cerberus-key.txt` in the project root — one
+line, nothing else. Then:
+
 ```bash
-cmake --preset windows-x64 -DTMD_CERBERUS_KEY=ctm_...
+cmake --preset windows-x64
 cmake --build --preset windows-x64
 ctest --preset windows-x64
 bash build-aux/deploy-windows.sh
 ```
 
-`TMD_CERBERUS_KEY` is the sign-in key, issued **per build** and never committed.
-A build without one compiles and runs and says plainly that it cannot sign in,
+The key is issued **per build**, is never committed, and `.gitignore` already
+excludes the file. Configure prints only its length and where it came from, never
+the key itself, so building in a shared terminal or a recorded session does not
+leak it. `-DTMD_CERBERUS_KEY=` and the `TMD_CERBERUS_KEY` environment variable
+also work and take precedence, but both put the key somewhere that gets echoed —
+a command line, shell history, a CI log — so the file is the better default.
+
+A build without a key compiles and runs and says plainly that it cannot sign in,
 rather than failing at a venue as a 401 indistinguishable from a revoked key.
+
+Anyone holding the built DLL can read the key out of it. That is inherent to
+baking one in, and is why Cerberus issues keys per build and can revoke them —
+but it means a build is as shareable as the key inside it.
 
 > On Windows, OBS loads plugins from `%ProgramData%\obs-studio\plugins`, **not**
 > from `%APPDATA%`. A plugin in the wrong one is not rejected — it is never

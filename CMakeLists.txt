@@ -71,28 +71,76 @@ set(TMD_TM_SOURCES
 )
 
 # The Cerberus client key is issued per build, never per laptop and never
-# committed. Pass it at configure time:
+# committed. It is resolved from the first of these that is set:
 #
-#   cmake --preset windows-x64 -DTMD_CERBERUS_KEY=ctm_...
+#   1. -DTMD_CERBERUS_KEY=ctm_...   for CI, where the secret is masked
+#   2. the TMD_CERBERUS_KEY env var for a developer shell
+#   3. cerberus-key.txt at the repo root
 #
-# A build without one still compiles and runs — it just cannot mint a bearer,
+# The file is there because the other two put the key on a command line or in an
+# environment, both of which get echoed into terminal scrollback, shell history
+# and any transcript of the session. A file written once in an editor does not.
+# .gitignore already excludes everything not explicitly whitelisted, so the file
+# cannot be committed by accident.
+#
+# The key is never message()d back out, only where it came from, so configuring
+# in a shared or recorded terminal does not leak it either.
+#
+# A build without a key still compiles and runs - it just cannot mint a bearer,
 # and says so in the dock rather than failing as an indistinguishable 401. That
 # matters for anyone building the plugin from source without SRA's key.
 set(TMD_CERBERUS_KEY "" CACHE STRING "Cerberus client key (ctm_...) to bake into this build")
 
-if(TMD_CERBERUS_KEY STREQUAL "")
+set(TMD_CERBERUS_KEY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/cerberus-key.txt")
+
+set(_tmd_cerberus_key "${TMD_CERBERUS_KEY}")
+set(_tmd_cerberus_key_source "-DTMD_CERBERUS_KEY")
+
+if(_tmd_cerberus_key STREQUAL "" AND NOT "$ENV{TMD_CERBERUS_KEY}" STREQUAL "")
+  set(_tmd_cerberus_key "$ENV{TMD_CERBERUS_KEY}")
+  set(_tmd_cerberus_key_source "the TMD_CERBERUS_KEY environment variable")
+endif()
+
+if(_tmd_cerberus_key STREQUAL "" AND EXISTS "${TMD_CERBERUS_KEY_FILE}")
+  file(READ "${TMD_CERBERUS_KEY_FILE}" _tmd_cerberus_key)
+  # A file written in an editor ends with a newline, and the key is compared
+  # byte for byte at the other end.
+  string(STRIP "${_tmd_cerberus_key}" _tmd_cerberus_key)
+  set(_tmd_cerberus_key_source "cerberus-key.txt")
+endif()
+
+if(_tmd_cerberus_key STREQUAL "")
   message(
     WARNING
-    "TMD_CERBERUS_KEY is not set. This build cannot sign in to Tournament Manager. "
-    "Configure with -DTMD_CERBERUS_KEY=ctm_... to produce a usable build."
+    "No Cerberus key. This build cannot sign in to Tournament Manager. "
+    "Write the key to cerberus-key.txt in the project root, or configure with "
+    "-DTMD_CERBERUS_KEY=ctm_... to produce a usable build."
   )
+else()
+  # Shape only. Enough to catch a truncated paste or a stray quote at configure
+  # time rather than as a 401 at a venue, and it reveals nothing.
+  #
+  # Length and pattern are checked separately because CMake's regex engine has no
+  # bounded repetition: {16} is matched literally, so a correct key fails a regex
+  # that looks right. The exact check lives in isValidCerberusKey either way.
+  string(LENGTH "${_tmd_cerberus_key}" _tmd_cerberus_key_length)
+  if(NOT _tmd_cerberus_key MATCHES "^ctm_[0-9a-f]+_[0-9a-f]+$" OR NOT _tmd_cerberus_key_length EQUAL 69)
+    message(
+      WARNING
+      "The Cerberus key from ${_tmd_cerberus_key_source} is not shaped like "
+      "ctm_<16 hex>_<48 hex> (length ${_tmd_cerberus_key_length}). Sign-in will "
+      "be refused locally before it is ever sent."
+    )
+  else()
+    message(STATUS "Cerberus key: ${_tmd_cerberus_key_length} characters from ${_tmd_cerberus_key_source}")
+  endif()
 endif()
 
 set_property(
   SOURCE src/tm/cerberus-auth.cpp
   APPEND
   PROPERTY COMPILE_DEFINITIONS
-    "TMD_CERBERUS_KEY=\"${TMD_CERBERUS_KEY}\""
+    "TMD_CERBERUS_KEY=\"${_tmd_cerberus_key}\""
     "TMD_BUILD_VERSION=\"${PROJECT_VERSION}\""
 )
 
