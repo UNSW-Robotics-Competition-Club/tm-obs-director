@@ -199,6 +199,12 @@ void Director::handleSocketState(SocketState state, const QString &detail)
 	QString line = QString::fromUtf8(socketStateName(state));
 	if (!detail.isEmpty())
 		line += QStringLiteral(": ") + detail;
+
+	// Also to OBS's log, not just the dock. The dock is cleared by a restart and
+	// nobody screenshots it, so when someone asks after an event why switching
+	// stopped at 2pm, the log is the only thing that can answer.
+	obs_log(LOG_INFO, "link %s", line.toUtf8().constData());
+
 	emit activity(line);
 	emit linkChanged();
 }
