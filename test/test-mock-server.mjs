@@ -10,7 +10,7 @@
 import { connect } from "node:net";
 import { createHash, randomBytes } from "node:crypto";
 
-import { createMockServer, API_KEY, CLIENT_ID, CLIENT_SECRET } from "./mock-tm-server.mjs";
+import { createMockServer, API_KEY, CERBERUS_KEY, MIN_BUILD } from "./mock-tm-server.mjs";
 import { sign } from "./tm-sign.mjs";
 
 let failures = 0;
@@ -148,16 +148,10 @@ function waitForClose(socket, timeoutMs = 3000) {
 	});
 }
 
-async function getToken(base) {
-	const res = await fetch(`${base}/oauth2/token`, {
-		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({
-			client_id: CLIENT_ID,
-			client_secret: CLIENT_SECRET,
-			grant_type: "client_credentials",
-		}),
-	});
+async function getToken(base, { key = CERBERUS_KEY, build = MIN_BUILD } = {}) {
+	const headers = { authorization: `Bearer ${key}` };
+	if (build !== null) headers["x-cerberus-build"] = build;
+	const res = await fetch(`${base}/v1/token`, { method: "POST", headers });
 	return { status: res.status, body: await res.json() };
 }
 
@@ -276,11 +270,42 @@ async function run() {
 	// --- scenarios ----------------------------------------------------------
 	console.log("scenarios");
 	{
-		const { server, base } = await listen("unauthorized");
+		const { server, base } = await listen("ok");
+		try {
+			const wrongKey = await getToken(base, { key: "ctm_" + "0".repeat(16) + "_" + "0".repeat(48) });
+			check("a key that is not ours is rejected", wrongKey.status === 401, `got ${wrongKey.status}`);
+			check("reports invalid_client", wrongKey.body.error === "invalid_client");
+
+			const noBuild = await getToken(base, { build: null });
+			check("a build header is required", noBuild.status === 426, `got ${noBuild.status}`);
+			check("reports upgrade_required", noBuild.body.error === "upgrade_required");
+			check("names the minimum", noBuild.body.minimum === MIN_BUILD);
+
+			// A revoked key must not learn the version floor, so the key is checked
+			// first. Sending both faults at once proves the order.
+			const both = await getToken(base, { key: "ctm_bad", build: null });
+			check("key is checked before the build floor", both.status === 401, `got ${both.status}`);
+		} finally {
+			server.close();
+		}
+	}
+	{
+		const { server, base } = await listen("cerberus-credentials-invalid");
 		try {
 			const tok = await getToken(base);
-			check("unauthorized scenario rejects credentials", tok.status === 401, `got ${tok.status}`);
-			check("reports invalid_client", tok.body.error === "invalid_client");
+			// Deliberately not a 401: the caller's key was fine.
+			check("our own credential failing is a 503", tok.status === 503, `got ${tok.status}`);
+			check("reports credentials_invalid", tok.body.error === "credentials_invalid");
+		} finally {
+			server.close();
+		}
+	}
+	{
+		const { server, base } = await listen("cerberus-rate-limited");
+		try {
+			const tok = await getToken(base);
+			check("rate limiting is a 429", tok.status === 429, `got ${tok.status}`);
+			check("reports rate_limited", tok.body.error === "rate_limited");
 		} finally {
 			server.close();
 		}

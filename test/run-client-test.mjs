@@ -21,9 +21,16 @@ if (!binary) {
 const CASES = [
 	{ client: "ok", server: "ok" },
 	{ client: "bad-key", server: "ok" },
-	{ client: "bad-client", server: "ok" },
-	{ client: "no-credentials", server: "ok" },
-	{ client: "unauthorized", server: "unauthorized" },
+	// The three sign-in key faults the operator can actually see the difference
+	// between: a key the server refuses, no key at all, and a mistyped one. The
+	// last two never reach the network.
+	{ client: "revoked-key", server: "ok" },
+	{ client: "no-key", server: "ok" },
+	{ client: "malformed-key", server: "ok" },
+	{ client: "upgrade-required", server: "cerberus-upgrade-required" },
+	{ client: "rate-limited", server: "cerberus-rate-limited" },
+	{ client: "credentials-invalid", server: "cerberus-credentials-invalid" },
+	{ client: "upstream-down", server: "cerberus-upstream" },
 	{ client: "api-disabled", server: "api-disabled" },
 	{ client: "clock-skew", server: "clock-skew" },
 	{ client: "unreachable", server: null },
@@ -65,15 +72,16 @@ for (const { client, server: scenario } of CASES) {
 		const code = await runBinary(client, base);
 		if (code !== 0) failures++;
 
-		// The API guide asks clients not to hammer the server. Caching the OAuth
-		// token is the single biggest part of that, so assert it rather than
-		// trusting the client to have done it.
+		// The API guide asks clients not to hammer the server, and Cerberus exists
+		// so DWAB is called once an hour rather than once a request. A client that
+		// asked Cerberus every time would move the stampede one hop closer rather
+		// than remove it, so assert the caching rather than trust it.
 		if (client === "ok") {
-			const tokenRequests = requests.filter((r) => r.path === "/oauth2/token").length;
+			const tokenRequests = requests.filter((r) => r.path === "/v1/token").length;
 			if (tokenRequests === 1) {
-				console.log("  ok   OAuth token fetched exactly once and cached");
+				console.log("  ok   bearer minted exactly once and cached");
 			} else {
-				console.log(`  FAIL OAuth token fetched ${tokenRequests} times, expected 1`);
+				console.log(`  FAIL bearer minted ${tokenRequests} times, expected 1`);
 				failures++;
 			}
 

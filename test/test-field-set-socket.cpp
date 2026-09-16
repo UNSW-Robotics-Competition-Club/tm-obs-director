@@ -136,10 +136,11 @@ tmd::TmConfig configFor(const std::string &base)
 {
 	tmd::TmConfig config;
 	config.baseUrl = base;
-	config.authUrl = base + "/oauth2/token";
-	config.clientId = "mock-client-id";
-	config.clientSecret = "mock-client-secret";
 	config.apiKey = "TESTAPIKEY0123456789";
+	config.cerberus.endpoint = base;
+	// Matches CERBERUS_KEY in test/mock-tm-server.mjs.
+	config.cerberus.apiKey = "ctm_0123456789abcdef_0123456789abcdef0123456789abcdef0123456789abcdef";
+	config.cerberus.buildVersion = "0.1.0";
 	return config;
 }
 

@@ -36,6 +36,14 @@ const char *tmErrorName(TmError error)
 		return "InvalidClientCredentials";
 	case TmError::AuthHostUnreachable:
 		return "AuthHostUnreachable";
+	case TmError::CerberusUnreachable:
+		return "CerberusUnreachable";
+	case TmError::CerberusKeyInvalid:
+		return "CerberusKeyInvalid";
+	case TmError::CerberusUpgradeRequired:
+		return "CerberusUpgradeRequired";
+	case TmError::CerberusRateLimited:
+		return "CerberusRateLimited";
 	case TmError::InvalidSignature:
 		return "InvalidSignature";
 	case TmError::ClockSkew:
@@ -63,11 +71,26 @@ const char *tmErrorRemedy(TmError error)
 		       "Tools > Options > Web Publishing and tick Enable Local TM API. This has to be "
 		       "done for each event.";
 	case TmError::InvalidClientCredentials:
-		return "The client ID or client secret was rejected. These come from DWAB and are tied "
-		       "to a season, so last season's credentials will not work.";
+		return "Sign-in failed on the Sydney Robotics Academy side: the developer credential "
+		       "behind it was rejected or has expired. Nothing at this venue will fix it - "
+		       "report it, and run the stream manually in the meantime.";
 	case TmError::AuthHostUnreachable:
-		return "Could not reach auth.vextm.dwabtech.com. Tournament Manager is on the local "
-		       "network but sign-in needs internet access. Check the venue's uplink.";
+		return "Sign-in reached Sydney Robotics Academy but could not reach DWAB's servers. "
+		       "This is an outage upstream; it usually clears on its own. Retry shortly.";
+	case TmError::CerberusUnreachable:
+		return "Could not reach the Sydney Robotics Academy sign-in service. Tournament Manager "
+		       "is on the local network, but signing in needs internet access. Check the "
+		       "venue's uplink, then press Test Connection again.";
+	case TmError::CerberusKeyInvalid:
+		return "This build's sign-in key was rejected. Keys are issued per build, so this "
+		       "plugin needs to be replaced with a current build - re-entering anything here "
+		       "will not help.";
+	case TmError::CerberusUpgradeRequired:
+		return "This plugin build is older than the minimum currently accepted. Install the "
+		       "latest build before the event.";
+	case TmError::CerberusRateLimited:
+		return "Sign-in is temporarily rate limited. Wait a minute and try again; if it keeps "
+		       "happening, another copy of the plugin is probably signing in in a loop.";
 	case TmError::InvalidSignature:
 		return "The TM API key was rejected. TM generates a new key for every event, so copy "
 		       "the key from this event's Web Publishing options.";

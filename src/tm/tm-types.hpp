@@ -43,14 +43,29 @@ enum class TmError {
 	/// Enable Local TM API for this event.
 	LocalApiDisabled,
 
-	/// The OAuth server rejected the client id/secret. The application-level
-	/// credentials from DWAB are wrong, revoked, or for a different season.
+	/// Cerberus reached DWAB and DWAB rejected SRA's own developer credential,
+	/// or that credential has expired. Nothing the venue operator can fix.
 	InvalidClientCredentials,
 
-	/// Could not reach the cloud OAuth host. Distinct from HostUnreachable:
-	/// TM is on the LAN but auth.vextm.dwabtech.com needs the internet, so
-	/// this is the failure a venue with no WAN uplink hits.
+	/// Cerberus could not reach DWAB. An outage upstream of us, not a
+	/// configuration problem: it resolves by waiting, not by changing anything.
 	AuthHostUnreachable,
+
+	/// Could not reach Cerberus at all. TM itself is on the LAN, but minting a
+	/// bearer needs the internet, so this is what a venue with no uplink hits.
+	CerberusUnreachable,
+
+	/// Cerberus rejected this build's client key: unknown, malformed, or
+	/// revoked. Cerberus deliberately does not say which, so that the endpoint
+	/// cannot be used to probe for valid keys.
+	CerberusKeyInvalid,
+
+	/// This build is older than the minimum version Cerberus accepts. The fix is
+	/// a newer plugin build, not a configuration change.
+	CerberusUpgradeRequired,
+
+	/// Cerberus is rate limiting this key. Backing off resolves it.
+	CerberusRateLimited,
 
 	/// The request signature did not match. The TM API key is wrong — usually
 	/// pasted from a different event, since the key is regenerated per event.

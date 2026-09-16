@@ -55,14 +55,17 @@ void checkError(const std::string &name, tmd::TmError actual, tmd::TmError expec
 		      (detail.empty() ? "" : " (" + detail + ")"));
 }
 
+/// Matches CERBERUS_KEY in test/mock-tm-server.mjs.
+const std::string kCerberusKey = "ctm_0123456789abcdef_0123456789abcdef0123456789abcdef0123456789abcdef";
+
 tmd::TmConfig configFor(const std::string &base)
 {
 	tmd::TmConfig config;
 	config.baseUrl = base;
-	config.authUrl = base + "/oauth2/token";
-	config.clientId = "mock-client-id";
-	config.clientSecret = "mock-client-secret";
 	config.apiKey = "TESTAPIKEY0123456789";
+	config.cerberus.endpoint = base;
+	config.cerberus.apiKey = kCerberusKey;
+	config.cerberus.buildVersion = "0.1.0";
 	return config;
 }
 
@@ -156,33 +159,71 @@ void testBadApiKey(const std::string &base)
 		   tmd::TmError::InvalidSignature, detail);
 }
 
-void testBadClientCredentials(const std::string &base)
+void testRevokedCerberusKey(const std::string &base)
 {
-	std::cout << "wrong client credentials\n";
+	std::cout << "sign-in key rejected\n";
 
 	tmd::TmConfig config = configFor(base);
-	config.clientSecret = "not-the-secret";
+	// Well formed, so it survives the local check and is actually sent.
+	config.cerberus.apiKey = "ctm_" + std::string(16, '0') + "_" + std::string(48, '0');
 
 	tmd::TmApiClient client(config);
 
 	std::string detail;
-	checkError("reported as InvalidClientCredentials", client.testConnection(detail),
-		   tmd::TmError::InvalidClientCredentials, detail);
+	checkError("reported as CerberusKeyInvalid", client.testConnection(detail),
+		   tmd::TmError::CerberusKeyInvalid, detail);
 }
 
-void testMissingCredentials(const std::string &base)
+void testMissingCerberusKey(const std::string &base)
 {
-	std::cout << "missing client credentials\n";
+	std::cout << "no sign-in key in this build\n";
 
 	tmd::TmConfig config = configFor(base);
-	config.clientId.clear();
-	config.clientSecret.clear();
+	config.cerberus.apiKey.clear();
 
 	tmd::TmApiClient client(config);
 
 	std::string detail;
 	checkError("caught before any request", client.testConnection(detail),
-		   tmd::TmError::InvalidClientCredentials, detail);
+		   tmd::TmError::CerberusKeyInvalid, detail);
+	check("says the build carries no key", detail.find("built into") != std::string::npos, detail);
+}
+
+void testMalformedCerberusKey(const std::string &base)
+{
+	std::cout << "malformed sign-in key\n";
+
+	tmd::TmConfig config = configFor(base);
+	config.cerberus.apiKey = "ctm_not-hex";
+
+	tmd::TmApiClient client(config);
+
+	std::string detail;
+	checkError("caught before any request", client.testConnection(detail),
+		   tmd::TmError::CerberusKeyInvalid, detail);
+	check("says the format is wrong", detail.find("format") != std::string::npos, detail);
+}
+
+void testUpgradeRequired(const std::string &base)
+{
+	std::cout << "build below the accepted minimum\n";
+
+	tmd::TmApiClient client(configFor(base));
+
+	std::string detail;
+	checkError("reported as CerberusUpgradeRequired", client.testConnection(detail),
+		   tmd::TmError::CerberusUpgradeRequired, detail);
+}
+
+void testRateLimited(const std::string &base)
+{
+	std::cout << "sign-in rate limited\n";
+
+	tmd::TmApiClient client(configFor(base));
+
+	std::string detail;
+	checkError("reported as CerberusRateLimited", client.testConnection(detail),
+		   tmd::TmError::CerberusRateLimited, detail);
 }
 
 void testApiDisabled(const std::string &base)
@@ -201,17 +242,14 @@ void testHostUnreachable()
 	std::cout << "host unreachable\n";
 
 	// Port 1 on loopback: nothing listens there, and it fails fast.
-	tmd::TmConfig config = configFor("http://127.0.0.1:1");
-	config.authUrl = "http://127.0.0.1:1/oauth2/token";
-
-	tmd::TmApiClient client(config);
+	tmd::TmApiClient client(configFor("http://127.0.0.1:1"));
 
 	std::string detail;
-	// The OAuth host is checked first, so an entirely dead address surfaces as
-	// AuthHostUnreachable. That is the honest answer: we never got far enough to
+	// Sign-in happens first, so an entirely dead address surfaces as
+	// CerberusUnreachable. That is the honest answer: we never got far enough to
 	// learn anything about TM itself.
-	checkError("reported as AuthHostUnreachable", client.testConnection(detail),
-		   tmd::TmError::AuthHostUnreachable, detail);
+	checkError("reported as CerberusUnreachable", client.testConnection(detail),
+		   tmd::TmError::CerberusUnreachable, detail);
 }
 
 void testClockSkew(const std::string &base)
@@ -231,15 +269,28 @@ void testClockSkew(const std::string &base)
 	check("measured skew is about an hour", skew < -3000 && skew > -4200, std::to_string(skew) + "s");
 }
 
-void testUnauthorized(const std::string &base)
+void testOurCredentialRejected(const std::string &base)
 {
-	std::cout << "OAuth endpoint rejects the client\n";
+	std::cout << "SRA's own credential rejected upstream\n";
 
 	tmd::TmApiClient client(configFor(base));
 
 	std::string detail;
+	// Not CerberusKeyInvalid: the operator's build is fine, ours is not, and
+	// telling them otherwise sends them off to debug the one thing that works.
 	checkError("reported as InvalidClientCredentials", client.testConnection(detail),
 		   tmd::TmError::InvalidClientCredentials, detail);
+}
+
+void testUpstreamDown(const std::string &base)
+{
+	std::cout << "sign-in could not reach DWAB\n";
+
+	tmd::TmApiClient client(configFor(base));
+
+	std::string detail;
+	checkError("reported as AuthHostUnreachable", client.testConnection(detail),
+		   tmd::TmError::AuthHostUnreachable, detail);
 }
 
 void testErrorMessages()
@@ -306,16 +357,24 @@ int main(int argc, char **argv)
 		testErrorMessages();
 	} else if (scenario == "bad-key") {
 		testBadApiKey(base);
-	} else if (scenario == "bad-client") {
-		testBadClientCredentials(base);
-	} else if (scenario == "no-credentials") {
-		testMissingCredentials(base);
+	} else if (scenario == "revoked-key") {
+		testRevokedCerberusKey(base);
+	} else if (scenario == "no-key") {
+		testMissingCerberusKey(base);
+	} else if (scenario == "malformed-key") {
+		testMalformedCerberusKey(base);
+	} else if (scenario == "upgrade-required") {
+		testUpgradeRequired(base);
+	} else if (scenario == "rate-limited") {
+		testRateLimited(base);
+	} else if (scenario == "credentials-invalid") {
+		testOurCredentialRejected(base);
+	} else if (scenario == "upstream-down") {
+		testUpstreamDown(base);
 	} else if (scenario == "api-disabled") {
 		testApiDisabled(base);
 	} else if (scenario == "clock-skew") {
 		testClockSkew(base);
-	} else if (scenario == "unauthorized") {
-		testUnauthorized(base);
 	} else if (scenario == "unreachable") {
 		testHostUnreachable();
 	} else {

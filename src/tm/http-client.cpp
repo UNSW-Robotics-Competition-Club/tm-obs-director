@@ -148,7 +148,8 @@ HttpResponse HttpClient::get(const std::string &url, const HttpHeaders &headers,
 	return response;
 }
 
-HttpResponse HttpClient::postForm(const std::string &url, const std::string &formBody, long timeoutMs)
+HttpResponse HttpClient::post(const std::string &url, const std::string &body, const HttpHeaders &headers,
+			      long timeoutMs)
 {
 	HttpResponse response;
 
@@ -159,13 +160,17 @@ HttpResponse HttpClient::postForm(const std::string &url, const std::string &for
 		return response;
 	}
 
-	curl_slist *list = curl_slist_append(nullptr, "Content-Type: application/x-www-form-urlencoded");
+	curl_slist *list = nullptr;
+	for (const auto &[name, value] : headers) {
+		list = curl_slist_append(list, (name + ": " + value).c_str());
+	}
 
 	applyCommonOptions(curl, url, timeoutMs, response);
 	curl_easy_setopt(curl, CURLOPT_POST, 1L);
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, formBody.c_str());
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(formBody.size()));
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+	if (list)
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
 	perform(curl, response);
 

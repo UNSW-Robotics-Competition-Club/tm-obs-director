@@ -56,8 +56,8 @@ struct HttpResponse {
 /// Minimal blocking HTTP client over libcurl.
 ///
 /// Deliberately not a general-purpose HTTP library: it does exactly the two
-/// request shapes the TM API needs (a signed GET and an OAuth form POST) and
-/// nothing else.
+/// request shapes this plugin needs - a signed GET against TM, and a POST
+/// carrying an Authorization header to mint a bearer - and nothing else.
 class HttpClient {
 public:
 	HttpClient();
@@ -68,8 +68,10 @@ public:
 
 	HttpResponse get(const std::string &url, const HttpHeaders &headers, long timeoutMs = kDefaultTimeoutMs);
 
-	HttpResponse postForm(const std::string &url, const std::string &formBody,
-			      long timeoutMs = kDefaultTimeoutMs);
+	/// POSTs `body` with `headers`. An empty body still sends Content-Length: 0,
+	/// which is what Cerberus's token endpoint expects.
+	HttpResponse post(const std::string &url, const std::string &body, const HttpHeaders &headers,
+			  long timeoutMs = kDefaultTimeoutMs);
 
 	static constexpr long kDefaultTimeoutMs = 10000;
 };

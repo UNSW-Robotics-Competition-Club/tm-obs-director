@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include "json-util.hpp"
 #include "tm-api-client.hpp"
 #include "tm-signer.hpp"
 
@@ -29,72 +30,6 @@ namespace tmd {
 namespace {
 
 using nlohmann::json;
-
-/// Refresh this far before actual expiry, so a long call cannot straddle it.
-constexpr int64_t kTokenRefreshMarginSeconds = 300;
-
-int64_t nowSeconds()
-{
-	return static_cast<int64_t>(std::time(nullptr));
-}
-
-/// Percent-encodes a value for an application/x-www-form-urlencoded body.
-/// Client secrets are opaque and may contain anything, so this cannot be skipped.
-std::string formEncode(const std::string &value)
-{
-	static constexpr char kHex[] = "0123456789ABCDEF";
-	std::string out;
-	out.reserve(value.size());
-
-	for (const unsigned char c : value) {
-		const bool unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-					(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~';
-		if (unreserved) {
-			out.push_back(static_cast<char>(c));
-		} else {
-			out.push_back('%');
-			out.push_back(kHex[c >> 4]);
-			out.push_back(kHex[c & 0x0F]);
-		}
-	}
-	return out;
-}
-
-/// Reads a JSON string field, tolerating absence and wrong types.
-std::string stringField(const json &object, const char *key, const std::string &fallback = {})
-{
-	const auto it = object.find(key);
-	if (it == object.end() || !it->is_string())
-		return fallback;
-	return it->get<std::string>();
-}
-
-int intField(const json &object, const char *key, int fallback = 0)
-{
-	const auto it = object.find(key);
-	if (it == object.end() || !it->is_number_integer())
-		return fallback;
-	return it->get<int>();
-}
-
-bool boolField(const json &object, const char *key, bool fallback = false)
-{
-	const auto it = object.find(key);
-	if (it == object.end() || !it->is_boolean())
-		return fallback;
-	return it->get<bool>();
-}
-
-/// Parses a response body, returning false (and setting `error`) on bad JSON.
-bool parseJson(const std::string &body, json &out, std::string &detail)
-{
-	out = json::parse(body, nullptr, false);
-	if (out.is_discarded()) {
-		detail = "response was not valid JSON";
-		return false;
-	}
-	return true;
-}
 
 /// Wraps a typed parse so every accessor shares the same failure handling.
 template<typename T, typename Parser>
@@ -164,15 +99,15 @@ void parseAllianceTeams(const json &alliance, std::vector<std::string> &out)
 
 } // namespace
 
-TmApiClient::TmApiClient(TmConfig config) : config_(std::move(config)) {}
+TmApiClient::TmApiClient(TmConfig config) : config_(std::move(config)), cerberus_(config_.cerberus) {}
 
 void TmApiClient::setConfig(TmConfig config)
 {
 	config_ = std::move(config);
 
 	// Credentials may have changed, so the cached token is no longer trustworthy.
+	cerberus_.setConfig(config_.cerberus);
 	token_.clear();
-	tokenExpiresAt_ = 0;
 	clockSkewSeconds_ = 0;
 }
 
@@ -190,56 +125,18 @@ void TmApiClient::recordClockSkew(const HttpResponse &response)
 
 TmError TmApiClient::ensureToken(std::string &detail)
 {
-	if (!token_.empty() && tokenExpiresAt_ > nowSeconds() + kTokenRefreshMarginSeconds)
-		return TmError::None;
+	// Caching lives in CerberusAuth, which knows the token's real remaining life;
+	// this keeps a copy only because signing needs it on every request.
+	const TmError error = cerberus_.token(token_, detail);
+	if (error != TmError::None)
+		token_.clear();
+	return error;
+}
 
-	if (config_.clientId.empty() || config_.clientSecret.empty()) {
-		detail = "client id and secret are not configured";
-		return TmError::InvalidClientCredentials;
-	}
-
-	const std::string body = "grant_type=client_credentials&client_id=" + formEncode(config_.clientId) +
-				 "&client_secret=" + formEncode(config_.clientSecret);
-
-	const HttpResponse response = http_.postForm(config_.authUrl, body);
-
-	if (response.transportFailed) {
-		// Distinct from the TM host being unreachable: this one is a cloud
-		// endpoint, so it fails when the venue has no internet even though TM
-		// itself is reachable on the LAN.
-		detail = response.transportError;
-		return TmError::AuthHostUnreachable;
-	}
-
-	if (response.status == 400 || response.status == 401 || response.status == 403) {
-		detail = "OAuth endpoint returned " + std::to_string(response.status) + ": " + response.body;
-		return TmError::InvalidClientCredentials;
-	}
-
-	if (!response.ok()) {
-		detail = "OAuth endpoint returned " + std::to_string(response.status);
-		return TmError::HttpError;
-	}
-
-	json document;
-	if (!parseJson(response.body, document, detail))
-		return TmError::MalformedResponse;
-
-	const std::string accessToken = stringField(document, "access_token");
-	if (accessToken.empty()) {
-		detail = "OAuth response had no access_token";
-		return TmError::MalformedResponse;
-	}
-
-	const int expiresIn = intField(document, "expires_in", 0);
-	if (expiresIn <= 0) {
-		detail = "OAuth response reported expires_in=" + std::to_string(expiresIn);
-		return TmError::TokenExpired;
-	}
-
-	token_ = accessToken;
-	tokenExpiresAt_ = nowSeconds() + expiresIn;
-	return TmError::None;
+void TmApiClient::invalidateToken()
+{
+	cerberus_.invalidate();
+	token_.clear();
 }
 
 TmError TmApiClient::acquireToken(std::string &token, std::string &detail)

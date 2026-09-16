@@ -23,9 +23,17 @@ import { sign } from "./tm-sign.mjs";
 // and never live in this repo.
 // ---------------------------------------------------------------------------
 
-export const CLIENT_ID = "mock-client-id";
 export const CLIENT_SECRET = "mock-client-secret";
 export const API_KEY = "TESTAPIKEY0123456789";
+
+// The bearer now comes from Cerberus rather than straight from DWAB, so this
+// mock stands in for Cerberus's /v1/token as well as for TM itself. A well
+// formed key: ctm_<16 hex>_<48 hex>.
+export const CERBERUS_KEY = "ctm_0123456789abcdef_" + "0123456789abcdef".repeat(3);
+
+// Cerberus refuses builds below a floor, which is why the client sends its
+// version at all. Anything below this is answered with upgrade_required.
+export const MIN_BUILD = "0.1.0";
 
 const TOKEN_TTL_SECONDS = 7200; // real TM tokens last ~2h
 const MAX_CLOCK_SKEW_SECONDS = 300;
@@ -39,7 +47,13 @@ const SCENARIOS = {
 	"api-disabled": "Event Partner never ticked Enable Local TM API: /api/* is 404.",
 	"bad-signature": "Every signature is rejected, as with a wrong TM API key.",
 	"token-expired": "Tokens are issued already expired, forcing a refresh path.",
-	unauthorized: "The OAuth token endpoint rejects the client credentials.",
+	"cerberus-invalid-key": "Sign-in rejects this build's client key (unknown, malformed, or revoked).",
+	"cerberus-upgrade-required": "Sign-in refuses this build as older than the supported minimum.",
+	"cerberus-rate-limited": "Sign-in is rate limiting this key.",
+	"cerberus-credentials-invalid":
+		"Sign-in reached DWAB and DWAB rejected SRA's own credential. Not the operator's fault, " +
+		"and deliberately not a 401.",
+	"cerberus-upstream": "Sign-in could not reach DWAB at all.",
 	"clock-skew":
 		"The server's clock reads an hour ahead, so requests are rejected the way real TM " +
 		"rejects a client whose clock has drifted.",
@@ -372,25 +386,52 @@ export function createMockServer({ scenario = "ok", log = true } = {}) {
 			if (log) console.log(`  ${req.method} ${url.pathname} -> ${status}${note ? ` (${note})` : ""}`);
 		};
 
-		// --- OAuth token endpoint ---------------------------------------------
-		if (url.pathname === "/oauth2/token") {
+		// --- Cerberus token endpoint ------------------------------------------
+		if (url.pathname === "/v1/token") {
 			if (req.method !== "POST") {
 				trace(405);
-				return sendJson(res, 405, { error: "method_not_allowed" });
+				return sendJson(res, 405, { error: "bad_request", message: "POST only" });
 			}
-			const params = new URLSearchParams(await readBody(req));
 
-			if (params.get("grant_type") !== "client_credentials") {
-				trace(400, "grant_type");
-				return sendJson(res, 400, { error: "unsupported_grant_type" });
+			// Ordering matters and mirrors Cerberus: the key is checked before the
+			// build floor, so a revoked key never learns the minimum version.
+			const auth = req.headers["authorization"] ?? "";
+			const key = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+			if (scenario === "cerberus-invalid-key" || key !== CERBERUS_KEY) {
+				trace(401, "bad client key");
+				return sendJson(res, 401, {
+					error: "invalid_client",
+					message: "Invalid or revoked API key",
+				});
 			}
-			if (
-				scenario === "unauthorized" ||
-				params.get("client_id") !== CLIENT_ID ||
-				params.get("client_secret") !== CLIENT_SECRET
-			) {
-				trace(401, "bad client credentials");
-				return sendJson(res, 401, { error: "invalid_client" });
+
+			const build = String(req.headers["x-cerberus-build"] ?? "").split("/")[0];
+			if (scenario === "cerberus-upgrade-required" || !build) {
+				trace(426, `build ${build || "(absent)"}`);
+				return sendJson(res, 426, {
+					error: "upgrade_required",
+					message: "Client version below the supported minimum",
+					minimum: MIN_BUILD,
+				});
+			}
+
+			if (scenario === "cerberus-rate-limited") {
+				trace(429);
+				return sendJson(res, 429, { error: "rate_limited", message: "Too many requests" });
+			}
+			if (scenario === "cerberus-credentials-invalid") {
+				trace(503);
+				return sendJson(res, 503, {
+					error: "credentials_invalid",
+					message: "The DWAB developer credential was rejected.",
+				});
+			}
+			if (scenario === "cerberus-upstream") {
+				trace(502);
+				return sendJson(res, 502, {
+					error: "upstream_error",
+					message: "Could not reach the DWAB authorization server",
+				});
 			}
 
 			const { token, ttl } = issueToken(scenario);

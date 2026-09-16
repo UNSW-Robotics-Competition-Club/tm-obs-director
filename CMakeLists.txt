@@ -65,8 +65,35 @@ set(TMD_TM_SOURCES
     src/tm/tm-types.cpp
     src/tm/tm-events.cpp
     src/tm/http-client.cpp
+    src/tm/cerberus-auth.cpp
     src/tm/tm-api-client.cpp
     src/tm/field-set-socket.cpp
+)
+
+# The Cerberus client key is issued per build, never per laptop and never
+# committed. Pass it at configure time:
+#
+#   cmake --preset windows-x64 -DTMD_CERBERUS_KEY=ctm_...
+#
+# A build without one still compiles and runs — it just cannot mint a bearer,
+# and says so in the dock rather than failing as an indistinguishable 401. That
+# matters for anyone building the plugin from source without SRA's key.
+set(TMD_CERBERUS_KEY "" CACHE STRING "Cerberus client key (ctm_...) to bake into this build")
+
+if(TMD_CERBERUS_KEY STREQUAL "")
+  message(
+    WARNING
+    "TMD_CERBERUS_KEY is not set. This build cannot sign in to Tournament Manager. "
+    "Configure with -DTMD_CERBERUS_KEY=ctm_... to produce a usable build."
+  )
+endif()
+
+set_property(
+  SOURCE src/tm/cerberus-auth.cpp
+  APPEND
+  PROPERTY COMPILE_DEFINITIONS
+    "TMD_CERBERUS_KEY=\"${TMD_CERBERUS_KEY}\""
+    "TMD_BUILD_VERSION=\"${PROJECT_VERSION}\""
 )
 
 # FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
