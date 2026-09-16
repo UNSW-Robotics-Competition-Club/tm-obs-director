@@ -700,9 +700,9 @@ if (isMain) {
 	const { server, fieldset } = createMockServer({ scenario: args.scenario });
 	server.listen(args.port, () => {
 		console.log(`Mock TM API on http://127.0.0.1:${args.port}  scenario=${args.scenario}`);
-		console.log(`  client id     ${CLIENT_ID}`);
-		console.log(`  client secret ${CLIENT_SECRET}`);
+		console.log(`  sign-in key   ${CERBERUS_KEY}`);
 		console.log(`  TM API key    ${API_KEY}`);
+		console.log(`  build floor   ${MIN_BUILD}`);
 		console.log(`  field set ws  ws://127.0.0.1:${args.port}/api/fieldsets/1`);
 	});
 

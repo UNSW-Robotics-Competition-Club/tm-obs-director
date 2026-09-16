@@ -105,9 +105,13 @@ set(TMD_ENGINE_SOURCES src/engine/fieldset-state.cpp src/engine/rules.cpp src/en
 # FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
 find_package(Threads REQUIRED)
 
+# The only sources that touch libobs or Qt. Everything they call is testable
+# without either.
+set(TMD_UI_SOURCES src/ui/settings.cpp src/ui/director.cpp src/ui/dock.cpp)
+
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES} ${TMD_ENGINE_SOURCES}
+  PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES} ${TMD_ENGINE_SOURCES} ${TMD_UI_SOURCES}
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
