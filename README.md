@@ -18,34 +18,16 @@ operator otherwise does by hand happens on its own.
 
 ## Setting it up at an event
 
-1. **In Tournament Manager**, open *Tools → Options → Web Publishing* and tick
-   **Enable Local TM API**. Copy the API key shown there.
+1. In Tournament Manager: **Tools → Options → Web Publishing → Enable Local TM
+   API**, and copy the API key. TM regenerates it every event.
+2. In OBS: open the **TM Director** dock, enter TM's address and that key, press
+   **Test connection**, pick your field set.
+3. Map each field to a scene and press **Save**.
 
-   > TM generates a **new key for every event**. A key that worked last weekend
-   > will not work this one, and TM reports the mismatch as a plain 401.
-
-2. **In OBS**, open the **TM Director** dock.
-3. Enter TM's address (`http://127.0.0.1` when OBS runs on the TM machine, or the
-   TM machine's LAN address otherwise) and paste the API key.
-4. Press **Test connection**. On success the field set list fills in; pick the one
-   this stream covers.
-5. Map each field to a scene. Leave a field on *(no switch)* to exclude it.
-6. Press **Save**. The status line and activity log show what the plugin is doing.
-
-### When something is wrong
-
-Every failure names its own fix in the dock rather than reporting a generic
-"connection failed", because the four things that go wrong need four different
-responses:
-
-| What it says | What to do |
-|---|---|
-| The API key was rejected | Re-copy it from *this* event's Web Publishing options |
-| The API is switched off | Tick Enable Local TM API in TM |
-| Could not reach TM | Check the address, the port, and that both machines are on the same network |
-| The clock is too far out | Turn on automatic time sync — TM signs requests with a timestamp |
-| Could not reach sign-in | This laptop has no internet route. TM is local, but the token is not |
-| This build's key was rejected | The plugin build needs replacing; nothing typed in the dock will help |
+**[docs/operator-guide.md](docs/operator-guide.md)** is the full version: how the
+scene fallback works, what delay and hold actually do, how to read the Live panel
+mid-event, and a table of every failure with who can fix it. That is the one to
+hand to whoever is running the stream.
 
 ## Two things worth knowing before an event
 
