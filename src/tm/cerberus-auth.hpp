@@ -38,7 +38,7 @@ namespace tmd {
 /// secrets meet nowhere except inside the signature.
 struct CerberusConfig {
 	/// Base URL, no trailing slash. The token endpoint is `{endpoint}/v1/token`.
-	std::string endpoint = "https://tm.sydneyrobotics.com.au";
+	std::string endpoint = "https://tm.unswrobotics.com";
 
 	/// Client key, `ctm_<16 hex>_<48 hex>`. Baked in at build time via
 	/// TMD_CERBERUS_KEY rather than typed by the operator, because a key is
