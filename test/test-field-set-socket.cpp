@@ -211,9 +211,8 @@ void testEventParsing()
 
 	check("audienceDisplayChanged parses",
 	      tmd::parseTmEvent(R"({"type":"audienceDisplayChanged","display":"IN_MATCH"})", event));
-	check("display decoded",
-	      event.type == tmd::TmEventType::AudienceDisplayChanged && event.hasDisplay &&
-		      event.display == tmd::AudienceDisplay::InMatch);
+	check("display decoded", event.type == tmd::TmEventType::AudienceDisplayChanged && event.hasDisplay &&
+					 event.display == tmd::AudienceDisplay::InMatch);
 
 	// A screen TM adds later must not silently read as Blank, which the rule
 	// engine would act on as a real instruction to blank the display.
@@ -264,10 +263,10 @@ void testEventStream(const std::string &base)
 
 	if (events.size() >= 7) {
 		check("1: fieldMatchAssigned", events[0].type == tmd::TmEventType::FieldMatchAssigned);
-		check("1: carries the queued match", events[0].hasMatch && events[0].match.match == 1 &&
-							    events[0].match.round == "QUAL");
-		check("2: fieldActivated", events[1].type == tmd::TmEventType::FieldActivated &&
-						   events[1].fieldId == 1);
+		check("1: carries the queued match",
+		      events[0].hasMatch && events[0].match.match == 1 && events[0].match.round == "QUAL");
+		check("2: fieldActivated",
+		      events[1].type == tmd::TmEventType::FieldActivated && events[1].fieldId == 1);
 		check("3: display INTRO", events[2].type == tmd::TmEventType::AudienceDisplayChanged &&
 						  events[2].display == tmd::AudienceDisplay::Intro);
 		check("4: matchStarted", events[3].type == tmd::TmEventType::MatchStarted);
@@ -406,8 +405,7 @@ void testWrongApiKey(const std::string &base)
 	check("upgrade is refused", recorder.waitForState(tmd::SocketState::Reconnecting));
 	check("never connects with a bad key", socket.connectionCount() == 0,
 	      std::to_string(socket.connectionCount()) + " connections");
-	check("refusal is a 401", recorder.lastDetail().find("401") != std::string::npos,
-	      recorder.lastDetail());
+	check("refusal is a 401", recorder.lastDetail().find("401") != std::string::npos, recorder.lastDetail());
 
 	socket.stop();
 }

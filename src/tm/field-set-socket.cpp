@@ -323,11 +323,10 @@ std::string FieldSetSocket::pump(void *handleAsVoid)
 
 		for (const std::string &payload : pending) {
 			size_t sent = 0;
-			const CURLcode code = curl_ws_send(handle, payload.data(), payload.size(), &sent, 0,
-							   CURLWS_TEXT);
+			const CURLcode code =
+				curl_ws_send(handle, payload.data(), payload.size(), &sent, 0, CURLWS_TEXT);
 			if (code != CURLE_OK)
-				return std::string("could not send a field set command: ") +
-				       curl_easy_strerror(code);
+				return std::string("could not send a field set command: ") + curl_easy_strerror(code);
 		}
 
 		size_t received = 0;

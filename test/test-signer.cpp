@@ -39,8 +39,8 @@ void expectEqual(const std::string &label, const std::string &actual, const std:
 	}
 
 	++gFailures;
-	std::printf("  FAIL %s\n         expected: %s\n         actual:   %s\n", label.c_str(),
-		    expected.c_str(), actual.c_str());
+	std::printf("  FAIL %s\n         expected: %s\n         actual:   %s\n", label.c_str(), expected.c_str(),
+		    actual.c_str());
 }
 
 void expectTrue(const std::string &label, bool condition)
@@ -67,12 +67,10 @@ void testGoldenVectors()
 		}
 
 		expectEqual(std::string(v.name) + " [canonical string]",
-			    tmd::buildStringToSign(v.method, parsed, v.token, v.tmDate),
-			    v.expectedStringToSign);
+			    tmd::buildStringToSign(v.method, parsed, v.token, v.tmDate), v.expectedStringToSign);
 
 		expectEqual(std::string(v.name) + " [signature]",
-			    tmd::signRequest(v.method, v.url, v.token, v.tmDate, v.apiKey),
-			    v.expectedSignature);
+			    tmd::signRequest(v.method, v.url, v.token, v.tmDate, v.apiKey), v.expectedSignature);
 	}
 }
 
@@ -120,8 +118,7 @@ void testRejectsMalformedUrls()
 
 	for (const char *url : bad) {
 		tmd::SignableUrl parsed;
-		expectTrue(std::string("rejects \"") + url + "\"",
-			   !tmd::parseSignableUrl(url, parsed));
+		expectTrue(std::string("rejects \"") + url + "\"", !tmd::parseSignableUrl(url, parsed));
 	}
 }
 
@@ -131,8 +128,7 @@ void testHttpDateFormat()
 	std::printf("http date formatting\n");
 
 	// 2026-08-11T03:14:00Z -- a Tuesday.
-	expectEqual("epoch 1786418040", tmd::formatHttpDate(1786418040),
-		    "Tue, 11 Aug 2026 03:14:00 GMT");
+	expectEqual("epoch 1786418040", tmd::formatHttpDate(1786418040), "Tue, 11 Aug 2026 03:14:00 GMT");
 	expectEqual("unix epoch", tmd::formatHttpDate(0), "Thu, 01 Jan 1970 00:00:00 GMT");
 }
 
@@ -145,8 +141,7 @@ void testFailureModes()
 		   tmd::signRequest("GET", "nonsense", "tok", "date", "key").empty());
 
 	expectTrue("valid request yields 64 hex chars",
-		   tmd::signRequest("GET", "http://tm.local/api/event", "tok", "date", "key")
-				   .length() == 64);
+		   tmd::signRequest("GET", "http://tm.local/api/event", "tok", "date", "key").length() == 64);
 }
 
 } // namespace

@@ -86,8 +86,8 @@ void testHappyPath(const std::string &base)
 
 	const auto divisions = client.getDivisions();
 	check("two divisions", divisions.ok() && divisions.value.size() == 2, divisions.detail);
-	check("division id and name", divisions.ok() && divisions.value[0].id == 1 &&
-					     divisions.value[0].name == "Division 1");
+	check("division id and name",
+	      divisions.ok() && divisions.value[0].id == 1 && divisions.value[0].name == "Division 1");
 
 	const auto fieldSets = client.getFieldSets();
 	check("two field sets", fieldSets.ok() && fieldSets.value.size() == 2, fieldSets.detail);
@@ -98,8 +98,8 @@ void testHappyPath(const std::string &base)
 
 	const auto teams = client.getTeams();
 	check("four teams", teams.ok() && teams.value.size() == 4, teams.detail);
-	check("team fields parsed", teams.ok() && teams.value[0].number == "1234A" &&
-					    teams.value[0].checkedIn && teams.value[0].divisionId == 1);
+	check("team fields parsed", teams.ok() && teams.value[0].number == "1234A" && teams.value[0].checkedIn &&
+					    teams.value[0].divisionId == 1);
 	check("checkedIn false round-trips", teams.ok() && !teams.value[2].checkedIn);
 
 	const auto matches = client.getMatches(1);
@@ -155,8 +155,8 @@ void testBadApiKey(const std::string &base)
 	tmd::TmApiClient client(config);
 
 	std::string detail;
-	checkError("reported as InvalidSignature", client.testConnection(detail),
-		   tmd::TmError::InvalidSignature, detail);
+	checkError("reported as InvalidSignature", client.testConnection(detail), tmd::TmError::InvalidSignature,
+		   detail);
 }
 
 void testRevokedCerberusKey(const std::string &base)
@@ -170,8 +170,8 @@ void testRevokedCerberusKey(const std::string &base)
 	tmd::TmApiClient client(config);
 
 	std::string detail;
-	checkError("reported as CerberusKeyInvalid", client.testConnection(detail),
-		   tmd::TmError::CerberusKeyInvalid, detail);
+	checkError("reported as CerberusKeyInvalid", client.testConnection(detail), tmd::TmError::CerberusKeyInvalid,
+		   detail);
 }
 
 void testMissingCerberusKey(const std::string &base)
@@ -184,8 +184,8 @@ void testMissingCerberusKey(const std::string &base)
 	tmd::TmApiClient client(config);
 
 	std::string detail;
-	checkError("caught before any request", client.testConnection(detail),
-		   tmd::TmError::CerberusKeyInvalid, detail);
+	checkError("caught before any request", client.testConnection(detail), tmd::TmError::CerberusKeyInvalid,
+		   detail);
 	check("says the build carries no key", detail.find("built into") != std::string::npos, detail);
 }
 
@@ -199,8 +199,8 @@ void testMalformedCerberusKey(const std::string &base)
 	tmd::TmApiClient client(config);
 
 	std::string detail;
-	checkError("caught before any request", client.testConnection(detail),
-		   tmd::TmError::CerberusKeyInvalid, detail);
+	checkError("caught before any request", client.testConnection(detail), tmd::TmError::CerberusKeyInvalid,
+		   detail);
 	check("says the format is wrong", detail.find("format") != std::string::npos, detail);
 }
 
@@ -222,8 +222,8 @@ void testRateLimited(const std::string &base)
 	tmd::TmApiClient client(configFor(base));
 
 	std::string detail;
-	checkError("reported as CerberusRateLimited", client.testConnection(detail),
-		   tmd::TmError::CerberusRateLimited, detail);
+	checkError("reported as CerberusRateLimited", client.testConnection(detail), tmd::TmError::CerberusRateLimited,
+		   detail);
 }
 
 void testApiDisabled(const std::string &base)
@@ -233,8 +233,8 @@ void testApiDisabled(const std::string &base)
 	tmd::TmApiClient client(configFor(base));
 
 	std::string detail;
-	checkError("reported as LocalApiDisabled", client.testConnection(detail),
-		   tmd::TmError::LocalApiDisabled, detail);
+	checkError("reported as LocalApiDisabled", client.testConnection(detail), tmd::TmError::LocalApiDisabled,
+		   detail);
 }
 
 void testHostUnreachable()
@@ -248,8 +248,8 @@ void testHostUnreachable()
 	// Sign-in happens first, so an entirely dead address surfaces as
 	// CerberusUnreachable. That is the honest answer: we never got far enough to
 	// learn anything about TM itself.
-	checkError("reported as CerberusUnreachable", client.testConnection(detail),
-		   tmd::TmError::CerberusUnreachable, detail);
+	checkError("reported as CerberusUnreachable", client.testConnection(detail), tmd::TmError::CerberusUnreachable,
+		   detail);
 }
 
 void testClockSkew(const std::string &base)
@@ -289,8 +289,8 @@ void testUpstreamDown(const std::string &base)
 	tmd::TmApiClient client(configFor(base));
 
 	std::string detail;
-	checkError("reported as AuthHostUnreachable", client.testConnection(detail),
-		   tmd::TmError::AuthHostUnreachable, detail);
+	checkError("reported as AuthHostUnreachable", client.testConnection(detail), tmd::TmError::AuthHostUnreachable,
+		   detail);
 }
 
 void testErrorMessages()
@@ -300,11 +300,16 @@ void testErrorMessages()
 	// Every error needs a name and a remedy: the dock shows the remedy, and a
 	// missing one would leave the user staring at a blank explanation.
 	const tmd::TmError all[] = {
-		tmd::TmError::None,           tmd::TmError::HostUnreachable,
-		tmd::TmError::LocalApiDisabled, tmd::TmError::InvalidClientCredentials,
-		tmd::TmError::AuthHostUnreachable, tmd::TmError::InvalidSignature,
-		tmd::TmError::ClockSkew,      tmd::TmError::TokenExpired,
-		tmd::TmError::HttpError,      tmd::TmError::MalformedResponse,
+		tmd::TmError::None,
+		tmd::TmError::HostUnreachable,
+		tmd::TmError::LocalApiDisabled,
+		tmd::TmError::InvalidClientCredentials,
+		tmd::TmError::AuthHostUnreachable,
+		tmd::TmError::InvalidSignature,
+		tmd::TmError::ClockSkew,
+		tmd::TmError::TokenExpired,
+		tmd::TmError::HttpError,
+		tmd::TmError::MalformedResponse,
 	};
 
 	bool allNamed = true;

@@ -112,8 +112,9 @@ namespace {
 
 // Index must line up with the AudienceDisplay enumerators.
 constexpr std::array<const char *, 12> kAudienceDisplayNames = {
-	"BLANK", "LOGO",      "INTRO",     "IN_MATCH",           "RESULTS", "SCHEDULE",
-	"RANKINGS", "SC_RANKINGS", "ALLIANCE_SELECTION", "BRACKET", "AWARD", "INSPECTION",
+	"BLANK",    "LOGO",       "INTRO",       "IN_MATCH",           "RESULTS",
+	"SCHEDULE", "RANKINGS",   "SC_RANKINGS", "ALLIANCE_SELECTION", "BRACKET",
+	"AWARD",    "INSPECTION",
 };
 
 } // namespace

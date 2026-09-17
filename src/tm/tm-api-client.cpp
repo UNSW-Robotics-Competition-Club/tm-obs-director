@@ -32,8 +32,7 @@ namespace {
 using nlohmann::json;
 
 /// Wraps a typed parse so every accessor shares the same failure handling.
-template<typename T, typename Parser>
-TmResult<T> parseInto(const TmRawResult &raw, Parser &&parser)
+template<typename T, typename Parser> TmResult<T> parseInto(const TmRawResult &raw, Parser &&parser)
 {
 	TmResult<T> result;
 
@@ -257,36 +256,36 @@ TmResult<Event> TmApiClient::getEvent()
 
 TmResult<std::vector<Division>> TmApiClient::getDivisions()
 {
-	return parseInto<std::vector<Division>>(
-		getRaw("/api/divisions"), [](const json &document, std::vector<Division> &out) {
-			const auto divisions = document.find("divisions");
-			if (divisions == document.end() || !divisions->is_array())
-				return false;
+	return parseInto<std::vector<Division>>(getRaw("/api/divisions"), [](const json &document,
+									     std::vector<Division> &out) {
+		const auto divisions = document.find("divisions");
+		if (divisions == document.end() || !divisions->is_array())
+			return false;
 
-			for (const auto &entry : *divisions) {
-				if (!entry.is_object())
-					continue;
-				out.push_back({intField(entry, "id"), stringField(entry, "name")});
-			}
-			return true;
-		});
+		for (const auto &entry : *divisions) {
+			if (!entry.is_object())
+				continue;
+			out.push_back({intField(entry, "id"), stringField(entry, "name")});
+		}
+		return true;
+	});
 }
 
 TmResult<std::vector<FieldSet>> TmApiClient::getFieldSets()
 {
-	return parseInto<std::vector<FieldSet>>(
-		getRaw("/api/fieldsets"), [](const json &document, std::vector<FieldSet> &out) {
-			const auto fieldSets = document.find("fieldSets");
-			if (fieldSets == document.end() || !fieldSets->is_array())
-				return false;
+	return parseInto<std::vector<FieldSet>>(getRaw("/api/fieldsets"), [](const json &document,
+									     std::vector<FieldSet> &out) {
+		const auto fieldSets = document.find("fieldSets");
+		if (fieldSets == document.end() || !fieldSets->is_array())
+			return false;
 
-			for (const auto &entry : *fieldSets) {
-				if (!entry.is_object())
-					continue;
-				out.push_back({intField(entry, "id"), stringField(entry, "name")});
-			}
-			return true;
-		});
+		for (const auto &entry : *fieldSets) {
+			if (!entry.is_object())
+				continue;
+			out.push_back({intField(entry, "id"), stringField(entry, "name")});
+		}
+		return true;
+	});
 }
 
 TmResult<std::vector<Field>> TmApiClient::getFields(int fieldSetId)
@@ -314,8 +313,7 @@ TmResult<std::vector<Team>> TmApiClient::getTeams()
 
 TmResult<std::vector<Team>> TmApiClient::getTeams(int divisionId)
 {
-	return parseInto<std::vector<Team>>(getRaw("/api/teams/" + std::to_string(divisionId)),
-					    parseTeamsDocument);
+	return parseInto<std::vector<Team>>(getRaw("/api/teams/" + std::to_string(divisionId)), parseTeamsDocument);
 }
 
 TmResult<std::vector<Match>> TmApiClient::getMatches(int divisionId)

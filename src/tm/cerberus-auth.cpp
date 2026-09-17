@@ -139,7 +139,7 @@ TmError CerberusAuth::mint(std::string &detail)
 		// Locally detectable, so it is caught here rather than spent as a request
 		// and returned as an indistinguishable 401.
 		detail = config_.apiKey.empty() ? "no sign-in key was built into this plugin"
-					        : "sign-in key is not in the expected ctm_ format";
+						: "sign-in key is not in the expected ctm_ format";
 		return TmError::CerberusKeyInvalid;
 	}
 

@@ -60,9 +60,8 @@ std::string normaliseAuthority(const std::string &authority, const std::string &
 	// An unbracketed IPv6 literal would confuse this, but TM is reached by
 	// IPv4 address or hostname in every documented deployment.
 	const std::string portText = authority.substr(colon + 1);
-	if (portText.empty() || !std::all_of(portText.begin(), portText.end(), [](unsigned char ch) {
-		    return std::isdigit(ch) != 0;
-	    }))
+	if (portText.empty() ||
+	    !std::all_of(portText.begin(), portText.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; }))
 		return authority;
 
 	const int port = std::atoi(portText.c_str());
@@ -120,11 +119,11 @@ bool parseSignableUrl(const std::string &url, SignableUrl &out)
 	return true;
 }
 
-std::string buildStringToSign(const std::string &method, const SignableUrl &url,
-			      const std::string &bearerToken, const std::string &tmDate)
+std::string buildStringToSign(const std::string &method, const SignableUrl &url, const std::string &bearerToken,
+			      const std::string &tmDate)
 {
-	return method + "\n" + url.pathAndQuery + "\n" + "token:" + bearerToken + "\n" +
-	       "host:" + url.host + "\n" + "x-tm-date:" + tmDate + "\n";
+	return method + "\n" + url.pathAndQuery + "\n" + "token:" + bearerToken + "\n" + "host:" + url.host + "\n" +
+	       "x-tm-date:" + tmDate + "\n";
 }
 
 std::string hmacSha256Hex(const std::string &key, const std::string &message)
@@ -134,10 +133,9 @@ std::string hmacSha256Hex(const std::string &key, const std::string &message)
 		return {};
 
 	unsigned char digest[kSha256DigestBytes] = {0};
-	const int result = mbedtls_md_hmac(info, reinterpret_cast<const unsigned char *>(key.data()),
-					   key.length(),
-					   reinterpret_cast<const unsigned char *>(message.data()),
-					   message.length(), digest);
+	const int result = mbedtls_md_hmac(info, reinterpret_cast<const unsigned char *>(key.data()), key.length(),
+					   reinterpret_cast<const unsigned char *>(message.data()), message.length(),
+					   digest);
 	if (result != 0)
 		return {};
 
@@ -151,9 +149,8 @@ std::string hmacSha256Hex(const std::string &key, const std::string &message)
 	return hex;
 }
 
-std::string signRequest(const std::string &method, const std::string &url,
-			const std::string &bearerToken, const std::string &tmDate,
-			const std::string &apiKey)
+std::string signRequest(const std::string &method, const std::string &url, const std::string &bearerToken,
+			const std::string &tmDate, const std::string &apiKey)
 {
 	SignableUrl parsed;
 	if (!parseSignableUrl(url, parsed))
@@ -179,8 +176,8 @@ std::string formatHttpDate(time_t utcTime)
 	char buffer[40] = {0};
 	std::snprintf(buffer, sizeof(buffer), "%s, %02d %s %04d %02d:%02d:%02d GMT",
 		      kDayNames[static_cast<size_t>(parts.tm_wday)], parts.tm_mday,
-		      kMonthNames[static_cast<size_t>(parts.tm_mon)], parts.tm_year + 1900,
-		      parts.tm_hour, parts.tm_min, parts.tm_sec);
+		      kMonthNames[static_cast<size_t>(parts.tm_mon)], parts.tm_year + 1900, parts.tm_hour, parts.tm_min,
+		      parts.tm_sec);
 
 	return std::string(buffer);
 }
@@ -210,8 +207,8 @@ bool parseHttpDate(const std::string &text, time_t &out)
 	if (month < 0)
 		return false;
 
-	if (day < 1 || day > 31 || year < 1970 || hour < 0 || hour > 23 || minute < 0 || minute > 59 ||
-	    second < 0 || second > 60)
+	if (day < 1 || day > 31 || year < 1970 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 ||
+	    second > 60)
 		return false;
 
 	struct tm parts = {};

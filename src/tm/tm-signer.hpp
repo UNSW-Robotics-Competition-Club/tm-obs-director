@@ -48,17 +48,16 @@ bool parseSignableUrl(const std::string &url, SignableUrl &out);
 ///     x-tm-date:<tmDate> \n
 ///
 /// Mirrors vex-tm-client v1.5.3 (out/Client.js), the reference implementation.
-std::string buildStringToSign(const std::string &method, const SignableUrl &url,
-			      const std::string &bearerToken, const std::string &tmDate);
+std::string buildStringToSign(const std::string &method, const SignableUrl &url, const std::string &bearerToken,
+			      const std::string &tmDate);
 
 /// HMAC-SHA256 of `message` under `key`, returned as lowercase hex.
 std::string hmacSha256Hex(const std::string &key, const std::string &message);
 
 /// Convenience: parse, canonicalise, and sign in one step.
 /// Returns an empty string if `url` could not be parsed.
-std::string signRequest(const std::string &method, const std::string &url,
-			const std::string &bearerToken, const std::string &tmDate,
-			const std::string &apiKey);
+std::string signRequest(const std::string &method, const std::string &url, const std::string &bearerToken,
+			const std::string &tmDate, const std::string &apiKey);
 
 /// Formats a UTC time_t as an RFC 7231 HTTP-date, the format TM expects in
 /// `x-tm-date` (e.g. "Mon, 11 Aug 2026 03:14:00 GMT").
