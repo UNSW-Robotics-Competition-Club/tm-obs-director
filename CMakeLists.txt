@@ -60,14 +60,15 @@ find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp REQUIRED)
 
 # The TM client is deliberately free of libobs and Qt so it can be tested on its
 # own. Keep it that way: anything needing OBS belongs in src/ui or src/engine.
-set(TMD_TM_SOURCES
-    src/tm/tm-signer.cpp
-    src/tm/tm-types.cpp
-    src/tm/tm-events.cpp
-    src/tm/http-client.cpp
-    src/tm/cerberus-auth.cpp
-    src/tm/tm-api-client.cpp
-    src/tm/field-set-socket.cpp
+set(
+  TMD_TM_SOURCES
+  src/tm/tm-signer.cpp
+  src/tm/tm-types.cpp
+  src/tm/tm-events.cpp
+  src/tm/http-client.cpp
+  src/tm/cerberus-auth.cpp
+  src/tm/tm-api-client.cpp
+  src/tm/field-set-socket.cpp
 )
 
 # The Cerberus client key is issued per build, never per laptop and never
@@ -139,20 +140,19 @@ endif()
 set_property(
   SOURCE src/tm/cerberus-auth.cpp
   APPEND
-  PROPERTY COMPILE_DEFINITIONS
-    "TMD_CERBERUS_KEY=\"${_tmd_cerberus_key}\""
-    "TMD_BUILD_VERSION=\"${PROJECT_VERSION}\""
+  PROPERTY COMPILE_DEFINITIONS "TMD_CERBERUS_KEY=\"${_tmd_cerberus_key}\"" "TMD_BUILD_VERSION=\"${PROJECT_VERSION}\""
 )
 
 # The engine holds the decisions: what state the field set is in, which scene an
 # event calls for, and when the switch actually happens. Like the TM client it
 # stays free of libobs and Qt, so all of that is testable against a fake clock
 # rather than against a stopwatch and a running OBS.
-set(TMD_ENGINE_SOURCES
-    src/engine/fieldset-state.cpp
-    src/engine/rules.cpp
-    src/engine/scheduler.cpp
-    src/engine/match-log.cpp
+set(
+  TMD_ENGINE_SOURCES
+  src/engine/fieldset-state.cpp
+  src/engine/rules.cpp
+  src/engine/scheduler.cpp
+  src/engine/match-log.cpp
 )
 
 # FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
@@ -168,10 +168,7 @@ target_sources(
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
-target_include_directories(
-  ${CMAKE_PROJECT_NAME}
-  PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src"
-)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
@@ -224,21 +221,17 @@ if(ENABLE_TESTS)
   if(NODE_EXECUTABLE)
     add_test(
       NAME tm-client
-      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/run-client-test.mjs"
-              "$<TARGET_FILE:test-tm-client>"
+      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/run-client-test.mjs" "$<TARGET_FILE:test-tm-client>"
     )
 
     # The mock is the oracle every integration test is judged against, so it is
     # tested first and on its own. Pure Node: no curl DLL, no PATH fixup.
-    add_test(
-      NAME mock-server
-      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/test-mock-server.mjs"
-    )
+    add_test(NAME mock-server COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/test-mock-server.mjs")
 
     add_test(
       NAME field-set-socket
-      COMMAND ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/run-socket-test.mjs"
-              "$<TARGET_FILE:test-field-set-socket>"
+      COMMAND
+        ${NODE_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/run-socket-test.mjs" "$<TARGET_FILE:test-field-set-socket>"
     )
 
     # obs-deps ships libcurl as a DLL. Without its directory on PATH the test
@@ -246,7 +239,8 @@ if(ENABLE_TESTS)
     # no output rather than anything resembling a helpful error.
     get_filename_component(TMD_DEPS_PREFIX "${CURL_DIR}/../../.." ABSOLUTE)
     set_tests_properties(
-      tm-client field-set-socket
+      tm-client
+      field-set-socket
       PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${TMD_DEPS_PREFIX}/bin"
     )
   else()
