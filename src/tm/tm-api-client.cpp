@@ -231,6 +231,15 @@ TmRawResult TmApiClient::getRaw(const std::string &path, const std::string &ifMo
 	recordClockSkew(response);
 
 	result.error = classify(response, result.detail);
+
+	// TM answers 401 both for a bearer it will not accept and for a signature it
+	// will not accept, and we cannot tell which from the body. Keeping the bearer
+	// means retrying a token TM has already rejected until it expires - up to an
+	// hour of every request failing identically. Dropping it costs one mint,
+	// which Cerberus serves from its own cache.
+	if (result.error == TmError::InvalidSignature || result.error == TmError::TokenExpired)
+		invalidateToken();
+
 	if (result.error != TmError::None)
 		return result;
 

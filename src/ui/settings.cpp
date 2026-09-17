@@ -98,6 +98,7 @@ bool saveDirectorSettings(const DirectorSettings &settings)
 	obs_data_set_string(root.get(), "cerberusEndpoint", settings.cerberusEndpoint.c_str());
 	obs_data_set_bool(root.get(), "matchLogEnabled", settings.matchLogEnabled);
 	obs_data_set_string(root.get(), "matchLogPath", settings.matchLogPath.c_str());
+	obs_data_set_bool(root.get(), "connectionCollapsed", settings.connectionCollapsed);
 
 	obs_data_set_bool(root.get(), "enabled", settings.rules.enabled);
 	obs_data_set_int(root.get(), "defaultDelayMs", settings.rules.defaultDelayMs);
@@ -141,6 +142,7 @@ bool loadDirectorSettings(DirectorSettings &out)
 	out.cerberusEndpoint = obs_data_get_string(root.get(), "cerberusEndpoint");
 	out.matchLogEnabled = obs_data_get_bool(root.get(), "matchLogEnabled");
 	out.matchLogPath = obs_data_get_string(root.get(), "matchLogPath");
+	out.connectionCollapsed = obs_data_get_bool(root.get(), "connectionCollapsed");
 
 	out.rules = RuleSet{};
 	out.rules.enabled = obs_data_get_bool(root.get(), "enabled");

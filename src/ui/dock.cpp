@@ -239,8 +239,28 @@ TmDirectorDock::~TmDirectorDock()
 
 QWidget *TmDirectorDock::buildConnectionGroup()
 {
-	auto *group = new QGroupBox(tr("Tournament Manager"));
-	auto *form = new QFormLayout(group);
+	auto *group = new QWidget();
+	auto *stack = new QVBoxLayout(group);
+	stack->setContentsMargins(0, 0, 0, 0);
+	stack->setSpacing(4);
+
+	// Same fold as a field block, for the same reason and so it reads the same
+	// way. A QGroupBox would have given the frame and the title for free, but not
+	// a title you can click.
+	connectionHeader_ = new QToolButton();
+	connectionHeader_->setText(tr("Tournament Manager"));
+	connectionHeader_->setCheckable(true);
+	connectionHeader_->setChecked(true);
+	connectionHeader_->setArrowType(Qt::DownArrow);
+	connectionHeader_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	connectionHeader_->setAutoRaise(true);
+	connectionHeader_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	stack->addWidget(connectionHeader_);
+
+	connectionBody_ = new QWidget();
+	auto *form = new QFormLayout(connectionBody_);
+	form->setContentsMargins(0, 0, 0, 0);
+	stack->addWidget(connectionBody_);
 
 	address_ = new QLineEdit();
 	address_->setPlaceholderText(QStringLiteral("http://127.0.0.1"));
@@ -259,6 +279,7 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	form->addRow(tr("Field set"), fieldSet_);
 
 	auto *buttons = new QHBoxLayout();
+	buttons->setContentsMargins(0, 0, 0, 0);
 	test_ = new QPushButton(tr("Test connection"));
 	reloadFields_ = new QPushButton(tr("Reload fields"));
 	// Equal halves of the dock's width rather than their text width plus a
@@ -268,7 +289,12 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	reloadFields_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	buttons->addWidget(test_, 1);
 	buttons->addWidget(reloadFields_, 1);
-	form->addRow(buttons);
+	// Outside connectionBody_, so collapsing keeps them. They are the point of
+	// the panel once it is configured: the button carries the connection state,
+	// and Reload fields is what you press when TM's field list changes.
+	stack->addLayout(buttons);
+
+	connect(connectionHeader_, &QToolButton::toggled, this, &TmDirectorDock::onConnectionCollapsed);
 
 	clearConnectionState();
 
@@ -602,6 +628,9 @@ void TmDirectorDock::loadFromSettings()
 	apiKey_->setText(QString::fromStdString(settings.tmApiKey));
 	enabled_->setChecked(settings.rules.enabled);
 	matchLogEnabled_->setChecked(settings.matchLogEnabled);
+	connectionHeader_->setChecked(!settings.connectionCollapsed);
+	connectionBody_->setVisible(!settings.connectionCollapsed);
+	connectionHeader_->setArrowType(settings.connectionCollapsed ? Qt::RightArrow : Qt::DownArrow);
 	matchLogPath_->setText(QString::fromStdString(settings.matchLogPath));
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
@@ -634,6 +663,7 @@ DirectorSettings TmDirectorDock::collectSettings() const
 	settings.fieldSetId = fieldSet.isValid() ? fieldSet.toInt() : 0;
 
 	settings.matchLogEnabled = matchLogEnabled_->isChecked();
+	settings.connectionCollapsed = !connectionHeader_->isChecked();
 	settings.matchLogPath = matchLogPath_->text().trimmed().toStdString();
 
 	settings.rules.enabled = enabled_->isChecked();
@@ -811,6 +841,14 @@ void TmDirectorDock::onBrowseMatchLog()
 
 	matchLogPath_->setText(chosen);
 	onSave();
+}
+
+void TmDirectorDock::onConnectionCollapsed(bool expanded)
+{
+	connectionBody_->setVisible(expanded);
+	connectionHeader_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+	if (!loading_)
+		onSave();
 }
 
 void TmDirectorDock::onLinkChanged()

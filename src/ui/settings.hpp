@@ -54,6 +54,11 @@ struct DirectorSettings {
 	/// Empty means the default beside the settings file.
 	std::string matchLogPath;
 
+	/// Whether the Tournament Manager panel is folded down to its buttons. Saved
+	/// because it is set once and meant to stay that way; re-expanding on every
+	/// OBS start would undo the point of collapsing it.
+	bool connectionCollapsed = false;
+
 	RuleSet rules;
 };
 

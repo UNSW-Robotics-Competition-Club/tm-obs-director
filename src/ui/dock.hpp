@@ -83,6 +83,7 @@ private slots:
 	void onReloadFields();
 	void onSave();
 	void onEnabledToggled(bool enabled);
+	void onConnectionCollapsed(bool expanded);
 	void onMatchLogToggled(bool enabled);
 	void onBrowseMatchLog();
 
@@ -142,6 +143,13 @@ private:
 	QPushButton *test_ = nullptr;
 	QPushButton *reloadFields_ = nullptr;
 	QPushButton *save_ = nullptr;
+
+	/// Collapses the address, key and field set, leaving the two buttons. Those
+	/// three are set once at the start of an event and then never touched, while
+	/// the buttons stay useful all day - so the panel folds down to exactly what
+	/// is still worth having on screen.
+	QToolButton *connectionHeader_ = nullptr;
+	QWidget *connectionBody_ = nullptr;
 
 	QCheckBox *enabled_ = nullptr;
 	QSpinBox *defaultDelay_ = nullptr;
