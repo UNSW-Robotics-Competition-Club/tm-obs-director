@@ -155,9 +155,9 @@ not fixable by the person standing at the laptop:
 | Could not reach Tournament Manager | Wrong address or port, or a different network | You |
 | The clock is too far out | The two machines disagree on the time; TM signs requests with a timestamp | You: turn on automatic time sync |
 | Could not reach the sign-in service | This laptop has no internet route | The venue's network |
-| This build's sign-in key was rejected | The plugin build needs replacing | SRA — nothing in the dock will help |
-| This plugin build is too old | Same | SRA |
-| Sign-in failed on the SRA side | SRA's own credential expired or was rejected | SRA — run manually meanwhile |
+| This build's sign-in key was rejected | The plugin build needs replacing | UNSW RCC — nothing in the dock will help |
+| This plugin build is too old | Same | UNSW RCC |
+| Sign-in failed on the club's side | The club's own credential expired or was rejected | UNSW RCC — run manually meanwhile |
 
 A scene named in your mapping that no longer exists in OBS is kept in the picker
 and marked **(missing)**, and a switch to it is logged as doing nothing rather
@@ -208,8 +208,8 @@ an event.
 
 | What | Where |
 |---|---|
-| The plugin | `C:\ProgramData\obs-studio\plugins\obs-tm-director\` |
-| Your settings | `%APPDATA%\obs-studio\plugin_config\obs-tm-director\tm-director.json` |
+| The plugin | `C:\ProgramData\obs-studio\plugins\tm-obs-director\` |
+| Your settings | `%APPDATA%\obs-studio\plugin_config\tm-obs-director\tm-director.json` |
 | OBS's log | `%APPDATA%\obs-studio\logs\` |
 
 The settings file holds the TM API key in plain text. It is per-event and only

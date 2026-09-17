@@ -1,6 +1,6 @@
 /*
-obs-tm-director
-Copyright (C) 2026 Sydney Robotics Academy
+tm-obs-director
+Copyright (C) 2026 UNSW Robotics Competition Club
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

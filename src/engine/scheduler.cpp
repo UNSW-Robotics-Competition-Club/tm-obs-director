@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

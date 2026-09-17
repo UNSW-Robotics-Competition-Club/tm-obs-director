@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #ifndef CURLWS_TEXT
 #error "This libcurl was built without WebSocket support. \
-obs-tm-director needs it for the TM field set event stream. \
+tm-obs-director needs it for the TM field set event stream. \
 Rebuild libcurl with --enable-websockets, or use the libcurl in the OBS \
 dependency bundle, which has it."
 #endif

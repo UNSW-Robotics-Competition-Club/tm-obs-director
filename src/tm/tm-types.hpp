@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ enum class TmError {
 	/// Enable Local TM API for this event.
 	LocalApiDisabled,
 
-	/// Cerberus reached DWAB and DWAB rejected SRA's own developer credential,
+	/// Cerberus reached DWAB and DWAB rejected the club's own developer credential,
 	/// or that credential has expired. Nothing the venue operator can fix.
 	InvalidClientCredentials,
 

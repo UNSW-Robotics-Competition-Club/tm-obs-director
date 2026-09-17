@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ namespace tmd {
 
 /// Everything needed to mint a TM bearer token through Cerberus.
 ///
-/// Cerberus (VEX-TM-Cerberus) holds SRA's DWAB client id and secret and hands
+/// Cerberus (VEX-TM-Cerberus) holds the club's DWAB client id and secret and hands
 /// out short-lived bearer tokens in exchange for a client key. That is the whole
 /// reason this plugin does not carry a DWAB secret: a secret baked into a build
 /// that ships to venue laptops cannot be rotated without recalling the build.
@@ -62,7 +62,7 @@ struct CerberusConfig {
 	long timeoutMs = 10000;
 };
 
-/// The config this build ships with: SRA's endpoint, the key compiled in via
+/// The config this build ships with: the club's endpoint, the key compiled in via
 /// TMD_CERBERUS_KEY, and this build's version. Start from this and override only
 /// what a test or an operator needs to change.
 CerberusConfig defaultCerberusConfig();

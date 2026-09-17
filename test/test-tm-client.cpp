@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -81,7 +81,7 @@ void testHappyPath(const std::string &base)
 	checkError("testConnection succeeds", client.testConnection(detail), tmd::TmError::None, detail);
 
 	const auto event = client.getEvent();
-	check("event name parsed", event.ok() && event.value.name == "SRA Mock Scrimmage", event.detail);
+	check("event name parsed", event.ok() && event.value.name == "UNSW Mock Scrimmage", event.detail);
 	check("event code parsed", event.ok() && event.value.code == "RE-V5RC-25-0000", event.detail);
 
 	const auto divisions = client.getDivisions();
@@ -271,7 +271,7 @@ void testClockSkew(const std::string &base)
 
 void testOurCredentialRejected(const std::string &base)
 {
-	std::cout << "SRA's own credential rejected upstream\n";
+	std::cout << "The club's own credential rejected upstream\n";
 
 	tmd::TmApiClient client(configFor(base));
 

@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.sydneyrobotics.obs-tm-director"
+            "bundleId": "com.unswrobotics.tm-obs-director"
         }
     },
-    "name": "obs-tm-director",
+    "name": "tm-obs-director",
     "displayName": "TM Director",
     "version": "0.1.0",
-    "author": "Sydney Robotics Academy",
+    "author": "UNSW Robotics Competition Club",
     "website": "https://github.com/UNSW-Robotics-Competition-Club/tm-obs-director",
     "email": "kevin.li@sydneyrobotics.com.au"
 }

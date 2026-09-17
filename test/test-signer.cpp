@@ -1,5 +1,5 @@
 /*
-obs-tm-director -- signer unit tests
+tm-obs-director -- signer unit tests
 
 Standalone: links only against tm-signer.cpp and mbedTLS, so it runs in CI
 without OBS or Qt present.

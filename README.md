@@ -32,12 +32,12 @@ hand to whoever is running the stream.
 ## Two things worth knowing before an event
 
 **Signing in needs the internet.** TM itself is LAN-only, but the bearer token
-comes from SRA's sign-in service, which does not run at the venue. A laptop with
+comes from the club's sign-in service, which does not run at the venue. A laptop with
 no uplink can reach TM and still not be able to automate anything. Check this
 during setup, not during the first match.
 
 **The TM API key is stored in plain text** in the plugin's config file
-(`%APPDATA%\obs-studio\plugin_config\obs-tm-director\tm-director.json`). It is
+(`%APPDATA%\obs-studio\plugin_config\tm-obs-director\tm-director.json`). It is
 per-event and only useful on the venue LAN, which is why this is acceptable — but
 it is not a secret this file protects.
 

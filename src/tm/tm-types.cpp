@@ -1,6 +1,6 @@
 /*
-obs-tm-director — VEX Tournament Manager automation for OBS Studio
-Copyright (C) 2026 Sydney Robotics Academy <kevin.li@sydneyrobotics.com.au>
+tm-obs-director — VEX Tournament Manager automation for OBS Studio
+Copyright (C) 2026 UNSW Robotics Competition Club <kevin.li@sydneyrobotics.com.au>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -71,14 +71,14 @@ const char *tmErrorRemedy(TmError error)
 		       "Tools > Options > Web Publishing and tick Enable Local TM API. This has to be "
 		       "done for each event.";
 	case TmError::InvalidClientCredentials:
-		return "Sign-in failed on the Sydney Robotics Academy side: the developer credential "
+		return "Sign-in failed on the UNSW Robotics Competition Club side: the developer credential "
 		       "behind it was rejected or has expired. Nothing at this venue will fix it - "
 		       "report it, and run the stream manually in the meantime.";
 	case TmError::AuthHostUnreachable:
-		return "Sign-in reached Sydney Robotics Academy but could not reach DWAB's servers. "
+		return "Sign-in reached the UNSW Robotics Competition Club but could not reach DWAB's servers. "
 		       "This is an outage upstream; it usually clears on its own. Retry shortly.";
 	case TmError::CerberusUnreachable:
-		return "Could not reach the Sydney Robotics Academy sign-in service. Tournament Manager "
+		return "Could not reach the UNSW Robotics Competition Club sign-in service. Tournament Manager "
 		       "is on the local network, but signing in needs internet access. Check the "
 		       "venue's uplink, then press Test Connection again.";
 	case TmError::CerberusKeyInvalid:

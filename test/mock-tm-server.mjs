@@ -52,7 +52,7 @@ const SCENARIOS = {
 	"cerberus-upgrade-required": "Sign-in refuses this build as older than the supported minimum.",
 	"cerberus-rate-limited": "Sign-in is rate limiting this key.",
 	"cerberus-credentials-invalid":
-		"Sign-in reached DWAB and DWAB rejected SRA's own credential. Not the operator's fault, " +
+		"Sign-in reached DWAB and DWAB rejected the club's own credential. Not the operator's fault, " +
 		"and deliberately not a 401.",
 	"cerberus-upstream": "Sign-in could not reach DWAB at all.",
 	"clock-skew":
@@ -67,7 +67,7 @@ const SKEW_SCENARIO_OFFSET_SECONDS = 3600;
 // Payloads, verbatim in shape from the API guide.
 // ---------------------------------------------------------------------------
 
-const EVENT = { event: { name: "SRA Mock Scrimmage", code: "RE-V5RC-25-0000" } };
+const EVENT = { event: { name: "UNSW Mock Scrimmage", code: "RE-V5RC-25-0000" } };
 
 const DIVISIONS = { divisions: [{ name: "Division 1", id: 1 }, { name: "Division 2", id: 2 }] };
 
@@ -80,9 +80,9 @@ const FIELDS = {
 
 const TEAMS = {
 	teams: [
-		{ number: "1234A", name: "Mock Robotics A", school: "SRA", city: "Sydney", region: "NSW",
+		{ number: "1234A", name: "Mock Robotics A", school: "UNSW", city: "Sydney", region: "NSW",
 		  country: "Australia", ageGroup: "High School", divId: 1, checkedIn: true },
-		{ number: "1234B", name: "Mock Robotics B", school: "SRA", city: "Sydney", region: "NSW",
+		{ number: "1234B", name: "Mock Robotics B", school: "UNSW", city: "Sydney", region: "NSW",
 		  country: "Australia", ageGroup: "High School", divId: 1, checkedIn: true },
 		{ number: "5678C", name: "Test Team C", school: "Other", city: "Melbourne", region: "VIC",
 		  country: "Australia", ageGroup: "High School", divId: 1, checkedIn: false },
