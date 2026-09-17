@@ -95,16 +95,30 @@ TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(pa
 	// neither is something this code can pick correctly for everyone.
 	auto *splitter = new QSplitter(Qt::Vertical);
 	splitter->setChildrenCollapsible(false);
-	splitter->addWidget(buildConnectionGroup());
-	splitter->addWidget(buildRulesGroup());
-	splitter->addWidget(buildLiveGroup());
 
-	// Only the scene mapping grows when the dock is resized; the other two have a
-	// natural size and keep it.
+	QWidget *connection = buildConnectionGroup();
+	QWidget *rules = buildRulesGroup();
+	QWidget *live = buildLiveGroup();
+
+	// Neither the connection form nor the live readout has anything to do with
+	// extra height: a form row does not grow, so surplus space in those panes just
+	// sits at the bottom of the box as a gap nobody asked for.
+	connection->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+	live->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+
+	splitter->addWidget(connection);
+	splitter->addWidget(rules);
+	splitter->addWidget(live);
+
 	splitter->setStretchFactor(0, 0);
 	splitter->setStretchFactor(1, 1);
 	splitter->setStretchFactor(2, 0);
-	splitter->setSizes({200, 560, 220});
+
+	// Deliberately not real pixel sizes. A splitter clamps each pane to its
+	// minimum, so asking for one pixel top and bottom means "as small as you can
+	// be" and hands every remaining pixel to the mapping - which is the pane that
+	// actually has more to show when the dock is tall.
+	splitter->setSizes({1, 10000, 1});
 
 	layout->addWidget(splitter);
 
@@ -157,6 +171,7 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 
 	connectionStatus_ = new QLabel();
 	connectionStatus_->setWordWrap(true);
+	connectionStatus_->hide();
 	form->addRow(connectionStatus_);
 
 	connect(test_, &QPushButton::clicked, this, &TmDirectorDock::onTestConnection);
@@ -254,6 +269,12 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	form->addRow(log_);
 
 	return group;
+}
+
+void TmDirectorDock::setConnectionStatus(const QString &text)
+{
+	connectionStatus_->setText(text);
+	connectionStatus_->setVisible(!text.isEmpty());
 }
 
 void TmDirectorDock::refreshScenes()
@@ -507,7 +528,7 @@ void TmDirectorDock::onTestConnection()
 	// been given is a good way to debug the wrong thing.
 	onSave();
 
-	connectionStatus_->setText(tr("Testing..."));
+	setConnectionStatus(tr("Testing..."));
 
 	runAsync([this]() {
 		std::string detail;
@@ -525,7 +546,7 @@ void TmDirectorDock::onTestConnection()
 		QMetaObject::invokeMethod(
 			this,
 			[this, error, remedy, detailText, fieldSets]() {
-				connectionStatus_->setText(remedy);
+				setConnectionStatus(remedy);
 				if (error != TmError::None) {
 					// The remedy is for the operator; the detail is for
 					// whoever they forward the log to.
@@ -576,7 +597,7 @@ void TmDirectorDock::onReloadFields()
 			this,
 			[this, error, remedy, fields]() {
 				if (error != TmError::None) {
-					connectionStatus_->setText(remedy);
+					setConnectionStatus(remedy);
 					return;
 				}
 				rebuildFieldRows(fields);

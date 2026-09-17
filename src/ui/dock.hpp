@@ -100,6 +100,12 @@ private:
 	void setAllFieldsCollapsed(bool collapsed);
 	void populateSceneCombo(QComboBox *combo, const QString &keep) const;
 
+	/// Sets the connection status line, hiding it entirely when there is nothing
+	/// to say. A word-wrapped label reserves its row even while empty, which is
+	/// dead space at the top of the dock for as long as nobody has pressed Test
+	/// connection.
+	void setConnectionStatus(const QString &text);
+
 	/// Runs a blocking TM call off the UI thread.
 	///
 	/// A venue laptop with no uplink takes the full timeout to fail, and a dock
