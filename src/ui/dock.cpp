@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-frontend-api.h>
 #include <obs.h>
 
+#include <QColor>
 #include <QDateTime>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -75,6 +76,59 @@ QString colourFor(tmd::LogLevel level)
 		break;
 	}
 	return QString();
+}
+
+/// What the Test connection button says once it is carrying the state.
+///
+/// Short enough to fit half the dock's width. The sentence explaining what to do
+/// about it is too long for a button, so it goes to the tooltip and the log,
+/// where it is not competing with the label for space.
+QString testLabelFor(tmd::LogLevel level)
+{
+	switch (level) {
+	case tmd::LogLevel::Good:
+		return QObject::tr("Connected");
+	// Warn and Bad differ in whether waiting will fix it, which is what the
+	// amber-versus-red carries. Both mean the same thing to read: no link.
+	case tmd::LogLevel::Warn:
+		return QObject::tr("Not connected");
+	case tmd::LogLevel::Bad:
+		return QObject::tr("Connection failed");
+	case tmd::LogLevel::Info:
+		break;
+	}
+	return QObject::tr("Test connection");
+}
+
+/// A wash of the status colour behind the button, rather than a solid fill.
+///
+/// Overriding background-color on a QPushButton drops the theme's own hover and
+/// pressed styling, so those states are restated here at stronger alphas -- a
+/// button that does not respond to the pointer reads as disabled. Kept to a
+/// light tint so it still looks like a button and not a status lamp, and left
+/// entirely alone for Info so an untested button matches every other one.
+QString testButtonStyle(tmd::LogLevel level)
+{
+	const QString colour = colourFor(level);
+	if (colour.isEmpty())
+		return QString();
+
+	const QColor base(colour);
+	const auto wash = [&base](int percent) {
+		return QStringLiteral("rgba(%1, %2, %3, %4%)")
+			.arg(base.red())
+			.arg(base.green())
+			.arg(base.blue())
+			.arg(percent);
+	};
+
+	return QStringLiteral("QPushButton { background-color: %1; color: %2; }"
+			      "QPushButton:hover { background-color: %3; }"
+			      "QPushButton:pressed { background-color: %4; }"
+			      // Held through the disabled state too, because the button is
+			      // disabled for the whole of the test it is reporting on.
+			      "QPushButton:disabled { background-color: %1; color: %2; }")
+		.arg(wash(15), colour, wash(25), wash(35));
 }
 
 /// Which failures an operator can wait out, and which need somebody to act.
@@ -164,13 +218,6 @@ TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(pa
 
 	layout->addWidget(splitter);
 
-	statusTimer_.setSingleShot(true);
-	statusTimer_.setInterval(5000);
-	connect(&statusTimer_, &QTimer::timeout, this, [this]() {
-		connectionStatus_->clear();
-		connectionStatus_->hide();
-	});
-
 	connect(director_, &Director::linkChanged, this, &TmDirectorDock::onLinkChanged);
 	connect(director_, &Director::stateChanged, this, &TmDirectorDock::onStateChanged);
 	connect(director_, &Director::activity, this, &TmDirectorDock::onActivity);
@@ -222,10 +269,13 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	buttons->addWidget(reloadFields_, 1);
 	form->addRow(buttons);
 
-	connectionStatus_ = new QLabel();
-	connectionStatus_->setWordWrap(true);
-	connectionStatus_->hide();
-	form->addRow(connectionStatus_);
+	clearConnectionState();
+
+	// An earlier result describes the address and key that produced it, so editing
+	// either one is exactly when it stops being true. textEdited rather than
+	// textChanged, so loading saved settings does not count as an edit.
+	connect(address_, &QLineEdit::textEdited, this, &TmDirectorDock::clearConnectionState);
+	connect(apiKey_, &QLineEdit::textEdited, this, &TmDirectorDock::clearConnectionState);
 
 	connect(test_, &QPushButton::clicked, this, &TmDirectorDock::onTestConnection);
 	connect(reloadFields_, &QPushButton::clicked, this, &TmDirectorDock::onReloadFields);
@@ -324,28 +374,26 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	return group;
 }
 
-void TmDirectorDock::setConnectionStatus(const QString &text, tmd::LogLevel level)
+void TmDirectorDock::setConnectionState(tmd::LogLevel level, const QString &label, const QString &detail)
 {
-	connectionStatus_->setText(text);
-	connectionStatus_->setVisible(!text.isEmpty());
+	test_->setText(label.isEmpty() ? testLabelFor(level) : label);
+	test_->setStyleSheet(testButtonStyle(level));
+	// The button can only hold two or three words, so the sentence that says what
+	// to do about it lives here. Falls back to naming the button's own job, which
+	// is what it means before anyone has pressed it.
+	test_->setToolTip(detail.isEmpty() ? tr("Check the connection to Tournament Manager.") : detail);
+}
 
-	const QString colour = colourFor(level);
-	connectionStatus_->setStyleSheet(colour.isEmpty() ? QString()
-							  : QStringLiteral("color: %1;").arg(colour));
-
-	// The same message is in the log, with a timestamp, so clearing this one
-	// loses nothing. Leaving it would mean a "Connected." from three hours ago
-	// still sitting there next to a link that has since dropped.
-	statusTimer_.stop();
-	if (!text.isEmpty())
-		statusTimer_.start();
+void TmDirectorDock::clearConnectionState()
+{
+	setConnectionState(tmd::LogLevel::Info, testLabelFor(tmd::LogLevel::Info), QString());
 }
 
 void TmDirectorDock::reportConnection(const QString &message, tmd::LogLevel level)
 {
-	setConnectionStatus(message, level);
-	// Copied rather than only shown: the status line clears itself after a few
-	// seconds, and the log is what is still there when someone asks what happened.
+	setConnectionState(level, testLabelFor(level), message);
+	// Copied rather than only shown: the button keeps two words and a colour, and
+	// the log is what is still there when someone asks what actually happened.
 	appendLog(message, level);
 }
 
@@ -614,7 +662,7 @@ void TmDirectorDock::onTestConnection()
 	// been given is a good way to debug the wrong thing.
 	onSave();
 
-	setConnectionStatus(tr("Testing..."), tmd::LogLevel::Info);
+	setConnectionState(tmd::LogLevel::Info, tr("Testing..."), tr("Asking Tournament Manager to answer."));
 
 	runAsync([this]() {
 		std::string detail;

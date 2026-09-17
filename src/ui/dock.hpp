@@ -28,7 +28,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSplitter>
-#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -101,16 +100,28 @@ private:
 	void setAllFieldsCollapsed(bool collapsed);
 	void populateSceneCombo(QComboBox *combo, const QString &keep) const;
 
-	/// Sets the connection status line, hiding it entirely when there is nothing
-	/// to say. A word-wrapped label reserves its row even while empty, which is
-	/// dead space at the top of the dock for as long as nobody has pressed Test
-	/// connection.
-	void setConnectionStatus(const QString &text, tmd::LogLevel level);
+	/// Puts the connection state on the Test connection button itself: the label
+	/// becomes the state, washed green, amber or red, with the full message on
+	/// the tooltip.
+	///
+	/// The button is the thing anyone actually looks at in this group, and the
+	/// status line that used to sit under it was empty for most of its life while
+	/// still reserving its row.
+	void setConnectionState(tmd::LogLevel level, const QString &label, const QString &detail);
+
+	/// Returns the button to its untested look.
+	///
+	/// Called when the address or key is edited, which is the moment an earlier
+	/// result stops describing anything. This replaces a timer that used to blank
+	/// the old status line after five seconds: a button that resets itself five
+	/// seconds after you press it is a worse affordance than one that holds its
+	/// answer until the question changes.
+	void clearConnectionState();
 
 	/// Appends one coloured line to the activity log.
 	void appendLog(const QString &line, tmd::LogLevel level);
 
-	/// Shows a connection result in the status line and copies it to the log.
+	/// Shows a connection result on the button and copies it to the log.
 	void reportConnection(const QString &message, tmd::LogLevel level);
 
 	/// Runs a blocking TM call off the UI thread.
@@ -129,7 +140,6 @@ private:
 	QPushButton *test_ = nullptr;
 	QPushButton *reloadFields_ = nullptr;
 	QPushButton *save_ = nullptr;
-	QLabel *connectionStatus_ = nullptr;
 
 	QCheckBox *enabled_ = nullptr;
 	QSpinBox *defaultDelay_ = nullptr;
@@ -141,12 +151,6 @@ private:
 	/// box says nothing about whether the plugin is broken or simply has not been
 	/// pointed at an event yet.
 	QLabel *noFields_ = nullptr;
-
-	/// Clears the connection status line a few seconds after it appears. The
-	/// message has already been copied into the log by then, so nothing is lost -
-	/// this only stops a stale "Connected." sitting there hours later looking like
-	/// it still means something.
-	QTimer statusTimer_;
 
 	QLabel *linkLabel_ = nullptr;
 	QLabel *matchLabel_ = nullptr;
