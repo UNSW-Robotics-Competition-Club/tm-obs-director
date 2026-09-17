@@ -41,7 +41,9 @@ namespace {
 const char *kNoScene = "(no switch)";
 
 /// Shown for a per-trigger picker that should follow the field's own scene.
-const char *kUseFieldScene = "(use field scene)";
+/// Worded to match the row it refers to: the label above says "Default scene",
+/// so this cannot say "field scene" and expect anyone to connect the two.
+const char *kUseFieldScene = "(use default)";
 
 QStringList currentSceneNames()
 {
@@ -354,7 +356,17 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		const FieldRule *saved = rules.findField(field.id);
 
 		row.defaultScene = new QComboBox();
-		grid->addWidget(new QLabel(tr("Scene")), 0, 0);
+		// "Scene" read as a peer of the four trigger rows rather than as the thing
+		// they fall back to, and the fallback is the whole point of the row: the
+		// common setup is one camera per field, set here once, with the triggers
+		// left alone.
+		auto *defaultLabel = new QLabel(tr("Default scene"));
+		const QString fallbackHelp = tr("Used by every trigger below that is set to \"(use field scene)\". "
+						"If this is \"(no switch)\" and a trigger has no scene of its own, "
+						"that trigger does nothing.");
+		defaultLabel->setToolTip(fallbackHelp);
+		row.defaultScene->setToolTip(fallbackHelp);
+		grid->addWidget(defaultLabel, 0, 0);
 		grid->addWidget(row.defaultScene, 0, 1);
 		populateSceneCombo(row.defaultScene, saved ? QString::fromStdString(saved->defaultScene) : QString());
 
@@ -364,7 +376,10 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 			row.triggerScene[t] = combo;
 
 			const QString label = QString::fromUtf8(triggerName(static_cast<Trigger>(t)));
-			grid->addWidget(new QLabel(label), t + 1, 0);
+			auto *triggerLabel = new QLabel(label);
+			triggerLabel->setToolTip(fallbackHelp);
+			combo->setToolTip(fallbackHelp);
+			grid->addWidget(triggerLabel, t + 1, 0);
 			grid->addWidget(combo, t + 1, 1);
 			populateSceneCombo(combo, saved ? QString::fromStdString(saved->sceneFor[t]) : QString());
 		}
