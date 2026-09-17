@@ -101,6 +101,14 @@ error messages are checked without having to break a real event.
 | `src/ui/` | The only code that touches libobs or Qt |
 | `test/` | Unit tests, the mock TM server, and the runners that pair them |
 
+The TM client follows [`tm-client`][tm-client], the canonical implementation of
+this API, as a specification — the two cannot share code, since one is
+TypeScript and this has to stay a single DLL with no Node on the venue laptop.
+[docs/tm-client-parity.md](docs/tm-client-parity.md) records what matches, what
+deliberately does not, and which version was checked.
+
+[tm-client]: https://github.com/UNSW-Robotics-Competition-Club/tm-client
+
 `src/tm` and `src/engine` are deliberately free of libobs and Qt. That is what
 makes the awkward parts — signing, reconnection, and the timing rules — testable
 without a running OBS.

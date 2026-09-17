@@ -53,8 +53,10 @@ struct FieldSetSocketConfig {
 
 	int fieldSetId = 1;
 
-	/// Reconnect ladder: first wait, doubling to the cap.
-	int initialBackoffMs = 500;
+	/// Reconnect ladder: first wait, doubling to the cap. Starts where
+	/// tm-client's DEFAULT_BACKOFF_MS starts, so a dropped cable behaves the same
+	/// whichever implementation an event happens to be running.
+	int initialBackoffMs = 1000;
 	int maxBackoffMs = 30000;
 
 	/// A connection that survives at least this long is treated as good, which
