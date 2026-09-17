@@ -65,12 +65,19 @@ QString sceneFromCombo(const QComboBox *combo)
 
 /// Seconds in the UI, milliseconds in the engine. Operators think in seconds and
 /// nobody wants to type 1500.
-QSpinBox *makeSecondsBox(const QString &suffix)
+///
+/// The unit is a suffix and the meaning is a label beside the box, rather than
+/// both crammed into the suffix: a narrow dock elides the end of a suffix, and
+/// "0 s de" is worse than useless. A per-field box also shows "default" instead
+/// of a number, which hides the suffix entirely - so the label is the only thing
+/// that can say which box is the delay and which is the hold.
+QSpinBox *makeSecondsBox()
 {
 	auto *box = new QSpinBox();
 	box->setRange(0, 60);
-	box->setSuffix(suffix);
+	box->setSuffix(QObject::tr(" s"));
 	box->setSingleStep(1);
+	box->setMinimumWidth(80);
 	return box;
 }
 
@@ -163,19 +170,10 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	auto *group = new QGroupBox(tr("Scenes"));
 	auto *outer = new QVBoxLayout(group);
 
-	enabled_ = new QCheckBox(tr("Automation on"));
 	// The one control an operator reaches for mid-match, so it sits above
 	// everything it governs rather than at the bottom of a scrolling list.
+	enabled_ = new QCheckBox(tr("Automation on"));
 	enabled_->setToolTip(tr("Stops all switching without changing any of the mapping below."));
-	outer->addWidget(enabled_);
-
-	auto *defaults = new QHBoxLayout();
-	defaultDelay_ = makeSecondsBox(tr(" s delay"));
-	defaultMinHold_ = makeSecondsBox(tr(" s hold"));
-	defaults->addWidget(new QLabel(tr("Default")));
-	defaults->addWidget(defaultDelay_);
-	defaults->addWidget(defaultMinHold_);
-	defaults->addStretch(1);
 
 	collapseAll_ = new QToolButton();
 	collapseAll_->setCheckable(true);
@@ -186,8 +184,22 @@ QWidget *TmDirectorDock::buildRulesGroup()
 		collapseAll_->setText(collapsed ? tr("Expand all") : tr("Collapse all"));
 		setAllFieldsCollapsed(collapsed);
 	});
-	defaults->addWidget(collapseAll_);
 
+	auto *top = new QHBoxLayout();
+	top->addWidget(enabled_);
+	top->addStretch(1);
+	top->addWidget(collapseAll_);
+	outer->addLayout(top);
+
+	// A form rather than one row. A dock is narrow, and a label, a spin box,
+	// another label, another spin box and a button do not fit across it - they
+	// just silently clip the ends of the numbers, which is how "0 s" became
+	// "0 s de" on the first attempt. Vertical space is the cheap axis here.
+	auto *defaults = new QFormLayout();
+	defaultDelay_ = makeSecondsBox();
+	defaultMinHold_ = makeSecondsBox();
+	defaults->addRow(tr("Default delay"), defaultDelay_);
+	defaults->addRow(tr("Default hold"), defaultMinHold_);
 	outer->addLayout(defaults);
 
 	auto *scroll = new QScrollArea();
@@ -358,8 +370,8 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		}
 
 		auto *timing = new QHBoxLayout();
-		row.delay = makeSecondsBox(tr(" s delay"));
-		row.minHold = makeSecondsBox(tr(" s hold"));
+		row.delay = makeSecondsBox();
+		row.minHold = makeSecondsBox();
 		// -1 in the model means "inherit". The UI says so in words instead, since
 		// a spin box showing -1 reads as a bug.
 		row.delay->setSpecialValueText(tr("default"));
@@ -368,7 +380,9 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		row.minHold->setMinimum(-1);
 		row.delay->setValue(saved && saved->delayMs >= 0 ? saved->delayMs / 1000 : -1);
 		row.minHold->setValue(saved && saved->minHoldMs >= 0 ? saved->minHoldMs / 1000 : -1);
+		timing->addWidget(new QLabel(tr("Delay")));
 		timing->addWidget(row.delay);
+		timing->addWidget(new QLabel(tr("Hold")));
 		timing->addWidget(row.minHold);
 		timing->addStretch(1);
 		grid->addLayout(timing, kTriggerCount + 1, 0, 1, 2);
