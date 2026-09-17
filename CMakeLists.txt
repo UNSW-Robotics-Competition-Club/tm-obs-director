@@ -193,9 +193,10 @@ if(WIN32)
     add_custom_target(
       installer
       COMMAND "${CMAKE_COMMAND}" -E rm -rf "${TMD_INSTALLER_SOURCE_DIR}"
-      COMMAND
-        "${CMAKE_COMMAND}" -E copy_directory "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${_name}"
-        "${TMD_INSTALLER_SOURCE_DIR}/data"
+      # Staged from the source tree, not from the build's rundir: that layout
+      # differs between a local build and CI, and the installed data is just
+      # data/ either way.
+      COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data" "${TMD_INSTALLER_SOURCE_DIR}/data"
       COMMAND
         "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:${CMAKE_PROJECT_NAME}>"
         "${TMD_INSTALLER_SOURCE_DIR}/bin/64bit/${_name}.dll"
