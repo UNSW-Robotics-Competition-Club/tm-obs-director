@@ -159,29 +159,67 @@ tmd::LogLevel levelFor(tmd::TmError error)
 /// A section heading you can click, rather than a button that happens to be a
 /// heading.
 ///
-/// A checkable QToolButton is the natural control for this, but OBS themes paint
-/// its checked state the way they paint a selected row - a full-width blue fill -
-/// so an expanded section read as "selected" and an operator could reasonably
-/// think they had picked something. The fill is taken off in every state and the
-/// weight does the work instead, leaving the arrow as the only thing that moves.
-QToolButton *makeFoldHeader(const QString &text)
+/// A checkable QToolButton is the natural control, but OBS themes paint its
+/// checked state the way they paint a selected row - a full-width blue fill - so
+/// an expanded section read as "selected" and an operator could reasonably think
+/// they had picked something. The fill is off in every state and the weight
+/// carries the heading instead.
+///
+/// The arrow sits at the right, where a disclosure control sits in every file
+/// browser and settings pane, rather than jammed against the first letter of the
+/// title. Qt's own arrow is drawn tight against the text with no way to pad it,
+/// so this is two widgets: the title takes the width and the arrow takes the
+/// end. Both toggle, because an arrow you cannot click is a target that looks
+/// like one.
+///
+/// Returns the row; `outHeader` receives the checkable button that carries the
+/// state.
+QWidget *makeFoldHeader(const QString &text, QAbstractButton **outHeader)
 {
-	auto *header = new QToolButton();
-	header->setText(text);
+	auto *row = new QWidget();
+	auto *layout = new QHBoxLayout(row);
+	layout->setContentsMargins(0, 0, 0, 0);
+	layout->setSpacing(0);
+
+	const QString flat = QStringLiteral("QToolButton { border: none; background: transparent;"
+					    " padding: 3px 2px; font-weight: 600; text-align: left; }"
+					    "QToolButton:checked { background: transparent; }"
+					    "QToolButton:hover { color: palette(highlight); }"
+					    "QToolButton:pressed { background: transparent; }");
+
+	// A QPushButton rather than a QToolButton for the title: a text-only tool
+	// button centres its label and ignores text-align from a stylesheet, so the
+	// heading drifted into the middle of the row the moment its arrow moved out.
+	auto *header = new QPushButton(text);
 	header->setCheckable(true);
 	header->setChecked(true);
-	header->setArrowType(Qt::DownArrow);
-	header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-	header->setAutoRaise(true);
-	header->setFocusPolicy(Qt::StrongFocus);
+	header->setFlat(true);
 	header->setCursor(Qt::PointingHandCursor);
 	header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	header->setStyleSheet(QStringLiteral("QToolButton { border: none; background: transparent; padding: 3px 2px;"
-					     " font-weight: 600; text-align: left; }"
-					     "QToolButton:checked { background: transparent; }"
-					     "QToolButton:hover { color: palette(highlight); }"
-					     "QToolButton:pressed { background: transparent; }"));
-	return header;
+	header->setStyleSheet(QStringLiteral("QPushButton { border: none; background: transparent;"
+					     " padding: 3px 2px; font-weight: 600; text-align: left; }"
+					     "QPushButton:checked { background: transparent; }"
+					     "QPushButton:hover { color: palette(highlight); }"
+					     "QPushButton:pressed { background: transparent; }"));
+
+	auto *arrow = new QToolButton();
+	arrow->setArrowType(Qt::DownArrow);
+	arrow->setAutoRaise(true);
+	arrow->setCursor(Qt::PointingHandCursor);
+	// Not a tab stop: it does the same thing as the title beside it, and two
+	// stops for one control is two presses of Tab to get past a heading.
+	arrow->setFocusPolicy(Qt::NoFocus);
+	arrow->setStyleSheet(flat);
+
+	layout->addWidget(header, 1);
+	layout->addWidget(arrow);
+
+	QObject::connect(arrow, &QToolButton::clicked, header, &QPushButton::toggle);
+	QObject::connect(header, &QPushButton::toggled, arrow,
+			 [arrow](bool expanded) { arrow->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow); });
+
+	*outHeader = header;
+	return row;
 }
 
 QString sceneFromCombo(const QComboBox *combo)
@@ -276,8 +314,7 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	// Same fold as a field block, for the same reason and so it reads the same
 	// way. A QGroupBox would have given the frame and the title for free, but not
 	// a title you can click.
-	connectionHeader_ = makeFoldHeader(tr("Tournament Manager"));
-	stack->addWidget(connectionHeader_);
+	stack->addWidget(makeFoldHeader(tr("Tournament Manager"), &connectionHeader_));
 
 	connectionBody_ = new QWidget();
 	auto *form = new QFormLayout(connectionBody_);
@@ -554,8 +591,7 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		// QGroupBox would give the same arrow for free, but its checkbox means
 		// "enabled", and an operator who collapsed a field to get it out of the way
 		// would have switched it off instead.
-		row.header = makeFoldHeader(title);
-		stack->addWidget(row.header);
+		stack->addWidget(makeFoldHeader(title, &row.header));
 
 		row.body = new QWidget();
 		auto *grid = new QGridLayout(row.body);
@@ -563,12 +599,9 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		grid->setVerticalSpacing(3);
 		stack->addWidget(row.body);
 
-		QToolButton *header = row.header;
+		QAbstractButton *header = row.header;
 		QWidget *body = row.body;
-		connect(header, &QToolButton::toggled, body, [header, body](bool expanded) {
-			body->setVisible(expanded);
-			header->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
-		});
+		connect(header, &QAbstractButton::toggled, body, [body](bool expanded) { body->setVisible(expanded); });
 
 		const FieldRule *saved = rules.findField(field.id);
 
@@ -648,7 +681,6 @@ void TmDirectorDock::loadFromSettings()
 	matchLogEnabled_->setChecked(settings.matchLogEnabled);
 	connectionHeader_->setChecked(!settings.connectionCollapsed);
 	connectionBody_->setVisible(!settings.connectionCollapsed);
-	connectionHeader_->setArrowType(settings.connectionCollapsed ? Qt::RightArrow : Qt::DownArrow);
 	matchLogPath_->setText(QString::fromStdString(settings.matchLogPath));
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
@@ -864,7 +896,6 @@ void TmDirectorDock::onBrowseMatchLog()
 void TmDirectorDock::onConnectionCollapsed(bool expanded)
 {
 	connectionBody_->setVisible(expanded);
-	connectionHeader_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
 	if (!loading_)
 		onSave();
 }

@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "ui/director.hpp"
 
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
@@ -50,7 +51,7 @@ struct FieldRow {
 	/// Click target that collapses the field. An event with six fields is six
 	/// blocks of five pickers, and an operator watching one field should not have
 	/// to scroll past the other five.
-	QToolButton *header = nullptr;
+	QAbstractButton *header = nullptr;
 	QWidget *body = nullptr;
 
 	QComboBox *defaultScene = nullptr;
@@ -148,7 +149,7 @@ private:
 	/// three are set once at the start of an event and then never touched, while
 	/// the buttons stay useful all day - so the panel folds down to exactly what
 	/// is still worth having on screen.
-	QToolButton *connectionHeader_ = nullptr;
+	QAbstractButton *connectionHeader_ = nullptr;
 	QWidget *connectionBody_ = nullptr;
 
 	QCheckBox *enabled_ = nullptr;
