@@ -15,6 +15,7 @@
 #define ModuleName "@TMD_INSTALLER_MODULE@"
 #define SourceDir "@TMD_INSTALLER_SOURCE_DIR@"
 #define OutputDir "@TMD_INSTALLER_OUTPUT_DIR@"
+#define LicenseFilePath "@TMD_INSTALLER_LICENSE@"
 
 [Setup]
 AppId={{9F2C1E64-4B7A-4E3D-9A42-7C1E5B0A6D18}
@@ -42,7 +43,7 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
 UninstallDisplayName={#AppName} {#AppVersion}
-LicenseFile={#SourceDir}\..\..\LICENSE
+LicenseFile={#LicenseFilePath}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

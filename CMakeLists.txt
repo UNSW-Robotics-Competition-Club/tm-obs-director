@@ -182,6 +182,9 @@ if(WIN32)
   # installer has to reproduce under ProgramData.
   set(TMD_INSTALLER_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/installer-stage/${_name}")
   set(TMD_INSTALLER_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/release")
+  # Absolute: anything relative in the .iss resolves against the staging
+  # directory, which is inside the build tree and has no LICENSE in it.
+  set(TMD_INSTALLER_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 
   configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/build-aux/installer-Windows.iss.in"
