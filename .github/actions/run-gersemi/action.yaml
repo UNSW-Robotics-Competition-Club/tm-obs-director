@@ -50,6 +50,13 @@ runs:
         if (( ${+RUNNER_DEBUG} )) setopt XTRACE
 
         print ::group::Install gersemi
+        # Homebrew refuses to install from a third-party tap it has not been told
+        # to trust, and skips it with a warning rather than an error - so the
+        # install "succeeds", the tool is absent, and the next line fails with
+        # something unrelated-looking. Trusting the tap explicitly is what the
+        # warning itself asks for.
+        brew tap obsproject/tools
+        brew trust obsproject/tools
         brew install --quiet obsproject/tools/gersemi
         print ::endgroup::
 
