@@ -156,6 +156,34 @@ tmd::LogLevel levelFor(tmd::TmError error)
 	}
 }
 
+/// A section heading you can click, rather than a button that happens to be a
+/// heading.
+///
+/// A checkable QToolButton is the natural control for this, but OBS themes paint
+/// its checked state the way they paint a selected row - a full-width blue fill -
+/// so an expanded section read as "selected" and an operator could reasonably
+/// think they had picked something. The fill is taken off in every state and the
+/// weight does the work instead, leaving the arrow as the only thing that moves.
+QToolButton *makeFoldHeader(const QString &text)
+{
+	auto *header = new QToolButton();
+	header->setText(text);
+	header->setCheckable(true);
+	header->setChecked(true);
+	header->setArrowType(Qt::DownArrow);
+	header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	header->setAutoRaise(true);
+	header->setFocusPolicy(Qt::StrongFocus);
+	header->setCursor(Qt::PointingHandCursor);
+	header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	header->setStyleSheet(QStringLiteral("QToolButton { border: none; background: transparent; padding: 3px 2px;"
+					     " font-weight: 600; text-align: left; }"
+					     "QToolButton:checked { background: transparent; }"
+					     "QToolButton:hover { color: palette(highlight); }"
+					     "QToolButton:pressed { background: transparent; }"));
+	return header;
+}
+
 QString sceneFromCombo(const QComboBox *combo)
 {
 	const QVariant data = combo->currentData();
@@ -185,6 +213,7 @@ QSpinBox *makeSecondsBox()
 TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(parent), director_(director)
 {
 	auto *layout = new QVBoxLayout(this);
+	layout->setContentsMargins(6, 6, 6, 6);
 
 	// A splitter rather than fixed proportions. How much room the scene mapping
 	// needs depends on how many fields the event has, and how much of the log an
@@ -242,24 +271,18 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	auto *group = new QWidget();
 	auto *stack = new QVBoxLayout(group);
 	stack->setContentsMargins(0, 0, 0, 0);
-	stack->setSpacing(4);
+	stack->setSpacing(2);
 
 	// Same fold as a field block, for the same reason and so it reads the same
 	// way. A QGroupBox would have given the frame and the title for free, but not
 	// a title you can click.
-	connectionHeader_ = new QToolButton();
-	connectionHeader_->setText(tr("Tournament Manager"));
-	connectionHeader_->setCheckable(true);
-	connectionHeader_->setChecked(true);
-	connectionHeader_->setArrowType(Qt::DownArrow);
-	connectionHeader_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-	connectionHeader_->setAutoRaise(true);
-	connectionHeader_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	connectionHeader_ = makeFoldHeader(tr("Tournament Manager"));
 	stack->addWidget(connectionHeader_);
 
 	connectionBody_ = new QWidget();
 	auto *form = new QFormLayout(connectionBody_);
-	form->setContentsMargins(0, 0, 0, 0);
+	form->setContentsMargins(0, 4, 0, 4);
+	form->setVerticalSpacing(4);
 	stack->addWidget(connectionBody_);
 
 	address_ = new QLineEdit();
@@ -531,18 +554,13 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		// QGroupBox would give the same arrow for free, but its checkbox means
 		// "enabled", and an operator who collapsed a field to get it out of the way
 		// would have switched it off instead.
-		row.header = new QToolButton();
-		row.header->setText(title);
-		row.header->setCheckable(true);
-		row.header->setChecked(true);
-		row.header->setArrowType(Qt::DownArrow);
-		row.header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-		row.header->setAutoRaise(true);
-		row.header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+		row.header = makeFoldHeader(title);
 		stack->addWidget(row.header);
 
 		row.body = new QWidget();
 		auto *grid = new QGridLayout(row.body);
+		grid->setContentsMargins(12, 2, 0, 6);
+		grid->setVerticalSpacing(3);
 		stack->addWidget(row.body);
 
 		QToolButton *header = row.header;
