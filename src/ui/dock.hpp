@@ -109,6 +109,11 @@ private:
 	QSpinBox *defaultMinHold_ = nullptr;
 	QVBoxLayout *fieldsLayout_ = nullptr;
 
+	/// Stands in for the field rows before TM has been asked for any. An empty
+	/// box says nothing about whether the plugin is broken or simply has not been
+	/// pointed at an event yet.
+	QLabel *noFields_ = nullptr;
+
 	QLabel *linkLabel_ = nullptr;
 	QLabel *matchLabel_ = nullptr;
 	QLabel *sceneLabel_ = nullptr;

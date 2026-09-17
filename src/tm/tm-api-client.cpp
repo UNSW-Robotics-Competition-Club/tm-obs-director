@@ -156,11 +156,21 @@ TmError TmApiClient::classify(const HttpResponse &response, std::string &detail)
 		return TmError::HostUnreachable;
 	}
 
+	if (response.status == 503) {
+		// What real TM actually answers when the Event Partner has not ticked
+		// Enable Local TM API. This is the single most common misconfiguration at
+		// an event, and without this branch it fell through to HttpError and was
+		// reported as "an unexpected response" - the exact uselessness the rest of
+		// this taxonomy exists to avoid.
+		detail = "server returned 503";
+		return TmError::LocalApiDisabled;
+	}
+
 	if (response.status == 404) {
-		// The whole /api/* namespace is absent until the Event Partner enables
-		// the Local TM API, so a 404 on a path we know exists means that, not a
-		// missing resource. Callers asking for a genuinely absent resource (an
-		// unknown division, say) get the same code -- the detail disambiguates.
+		// The same condition in a different shape: the whole /api/* namespace is
+		// absent, so a 404 on a path we know exists means the API is off, not that
+		// a resource is missing. Callers asking for a genuinely absent resource
+		// (an unknown division, say) get the same code -- the detail disambiguates.
 		detail = "server returned 404";
 		return TmError::LocalApiDisabled;
 	}

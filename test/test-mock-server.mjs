@@ -313,10 +313,19 @@ async function run() {
 	{
 		const { server, base } = await listen("api-disabled");
 		try {
-			// No auth needed: the point is that /api/* does not exist at all, so
-			// the client must not mistake this for an auth problem.
+			// No auth needed: the point is that /api/* is not being served at all,
+			// so the client must not mistake this for an auth problem.
 			const res = await fetch(`${base}/api/event`);
-			check("api-disabled yields 404 not 401", res.status === 404, `got ${res.status}`);
+			check("api-disabled yields 503, as real TM does", res.status === 503, `got ${res.status}`);
+		} finally {
+			server.close();
+		}
+	}
+	{
+		const { server, base } = await listen("api-disabled-404");
+		try {
+			const res = await fetch(`${base}/api/event`);
+			check("the 404 shape is still available", res.status === 404, `got ${res.status}`);
 		} finally {
 			server.close();
 		}
@@ -411,7 +420,7 @@ async function run() {
 		try {
 			const { body } = await getToken(base);
 			const refused = await openWebSocket(base, { token: body.access_token });
-			check("websocket is absent when the Local TM API is off", refused.status === 404,
+			check("websocket is absent when the Local TM API is off", refused.status === 503,
 			      `got ${refused.status}`);
 			refused.socket.destroy();
 		} finally {

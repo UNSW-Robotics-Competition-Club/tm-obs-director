@@ -451,7 +451,7 @@ int main(int argc, char **argv)
 	} else if (scenario == "bad-signature") {
 		testUpgradeRefused(base, "401");
 	} else if (scenario == "api-disabled") {
-		testUpgradeRefused(base, "404");
+		testUpgradeRefused(base, "503");
 	} else if (scenario == "unreachable") {
 		testHostUnreachable();
 	} else {

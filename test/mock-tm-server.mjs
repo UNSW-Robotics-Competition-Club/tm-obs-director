@@ -44,7 +44,8 @@ const MAX_CLOCK_SKEW_SECONDS = 300;
 
 const SCENARIOS = {
 	ok: "Everything works.",
-	"api-disabled": "Event Partner never ticked Enable Local TM API: /api/* is 404.",
+	"api-disabled": "Event Partner never ticked Enable Local TM API: /api/* is 503, as real TM answers.",
+	"api-disabled-404": "The same thing, but answered 404. Older TM builds, and a defensive second shape.",
 	"bad-signature": "Every signature is rejected, as with a wrong TM API key.",
 	"token-expired": "Tokens are issued already expired, forcing a refresh path.",
 	"cerberus-invalid-key": "Sign-in rejects this build's client key (unknown, malformed, or revoked).",
@@ -446,10 +447,19 @@ export function createMockServer({ scenario = "ok", log = true } = {}) {
 		}
 
 		// TM only exposes /api/* once the Event Partner enables the Local TM API.
-		// Before that the whole namespace is simply absent -- which is why an
-		// unauthenticated 404 here must not be reported as an auth failure.
+		// Before that it answers 503 -- verified against the reference client,
+		// which maps exactly that status to "the API is not enabled". This mock
+		// previously answered 404 here, which is a shape real TM does not send,
+		// and the client's own test agreed with the mock rather than with TM.
+		//
+		// Neither status is an auth failure, and reporting it as one sends an
+		// operator to re-copy a key that was never the problem.
 		if (scenario === "api-disabled") {
-			trace(404, "Local TM API not enabled");
+			trace(503, "Local TM API not enabled");
+			return sendJson(res, 503, { error: "service_unavailable" });
+		}
+		if (scenario === "api-disabled-404") {
+			trace(404, "Local TM API not enabled (404 shape)");
 			return sendJson(res, 404, { error: "not_found" });
 		}
 
@@ -534,7 +544,8 @@ export function createMockServer({ scenario = "ok", log = true } = {}) {
 		const fieldSetId = Number(match[1]);
 		if (!FIELDS[fieldSetId]) return refuse(404, "Not Found", "unknown field set");
 
-		if (scenario === "api-disabled") return refuse(404, "Not Found", "Local TM API not enabled");
+		if (scenario === "api-disabled") return refuse(503, "Service Unavailable", "Local TM API not enabled");
+		if (scenario === "api-disabled-404") return refuse(404, "Not Found", "Local TM API not enabled");
 		if (scenario === "clock-skew") return refuse(401, "Unauthorized", "clock_skew");
 
 		const denial = authorise(req, scenario);

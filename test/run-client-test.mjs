@@ -31,7 +31,10 @@ const CASES = [
 	{ client: "rate-limited", server: "cerberus-rate-limited" },
 	{ client: "credentials-invalid", server: "cerberus-credentials-invalid" },
 	{ client: "upstream-down", server: "cerberus-upstream" },
+	// Both shapes of "the Local TM API is off". 503 is what real TM sends; 404 is
+	// kept because the client used to only handle that one, and only that one.
 	{ client: "api-disabled", server: "api-disabled" },
+	{ client: "api-disabled", server: "api-disabled-404" },
 	{ client: "clock-skew", server: "clock-skew" },
 	{ client: "unreachable", server: null },
 ];

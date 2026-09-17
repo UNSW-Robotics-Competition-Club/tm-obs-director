@@ -112,7 +112,9 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	apiKey_->setEchoMode(QLineEdit::Password);
 	// Named rather than described, because the key is regenerated per event and
 	// "it worked last week" is the most common way this goes wrong.
-	apiKey_->setPlaceholderText(tr("This event's key from Tools > Options > Web Publishing"));
+	apiKey_->setPlaceholderText(tr("This event's Web Publishing key"));
+	apiKey_->setToolTip(tr("In Tournament Manager: Tools > Options > Web Publishing. TM generates a new "
+			       "key for every event."));
 	form->addRow(tr("API key"), apiKey_);
 
 	fieldSet_ = new QComboBox();
@@ -162,6 +164,14 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	scroll->setWidgetResizable(true);
 	auto *inner = new QWidget();
 	fieldsLayout_ = new QVBoxLayout(inner);
+
+	noFields_ = new QLabel(tr("No fields yet. Enter the address and API key above, then "
+				  "press Test connection."));
+	noFields_->setWordWrap(true);
+	noFields_->setAlignment(Qt::AlignCenter);
+	noFields_->setEnabled(false);
+	fieldsLayout_->addWidget(noFields_);
+
 	fieldsLayout_->addStretch(1);
 	scroll->setWidget(inner);
 	outer->addWidget(scroll, 1);
@@ -299,6 +309,10 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 
 	if (fields.empty())
 		onActivity(tr("TM reported no fields for this field set."));
+
+	noFields_->setVisible(rows_.empty());
+	if (rows_.empty() && !fields.empty())
+		noFields_->setText(tr("TM reported no fields for this field set."));
 }
 
 void TmDirectorDock::loadFromSettings()
