@@ -70,6 +70,21 @@ Anyone holding the built DLL can read the key out of it. That is inherent to
 baking one in, and is why Cerberus issues keys per build and can revoke them —
 but it means a build is as shareable as the key inside it.
 
+### Installer
+
+```bash
+cmake --build --preset windows-x64 --target installer
+```
+
+Produces `release/tm-obs-director-<version>-windows-x64-installer.exe`. Needs
+[Inno Setup 6](https://jrsoftware.org/isdl.php); without it the target is simply
+not offered and everything else still builds. CI builds it on every Windows run,
+so a tagged release carries one without anyone installing Inno Setup locally.
+
+The installer puts the plugin where OBS actually reads it, removes the folder
+from the plugin's previous name so two copies cannot both load, refuses to run
+while OBS has the DLL open, and leaves settings alone.
+
 > On Windows, OBS loads plugins from `%ProgramData%\obs-studio\plugins`, **not**
 > from `%APPDATA%`. A plugin in the wrong one is not rejected — it is never
 > looked at. `build-aux/deploy-windows.sh` puts it in the right place.

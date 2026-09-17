@@ -158,6 +158,58 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${NLOHMANN_JSON_INCLUDE
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
+# Windows installer. The template only ever produced a zip, which leaves the
+# operator to put the files in the one folder OBS reads and no other - the
+# mistake this plugin's own history is a record of.
+#
+# Inno Setup is not a build dependency: without it the target simply is not
+# offered, and CI builds the installer on a runner that has it.
+if(WIN32)
+  find_program(
+    TMD_ISCC
+    NAMES ISCC
+    PATHS "C:/Program Files (x86)/Inno Setup 6" "C:/Program Files/Inno Setup 6"
+    DOC "Inno Setup command-line compiler, for the installer target"
+  )
+
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" _tmd_buildspec)
+  string(JSON TMD_INSTALLER_DISPLAY_NAME GET "${_tmd_buildspec}" displayName)
+  set(TMD_INSTALLER_VERSION "${_version}")
+  set(TMD_INSTALLER_PUBLISHER "${_author}")
+  set(TMD_INSTALLER_URL "${_website}")
+  set(TMD_INSTALLER_MODULE "${_name}")
+  # The staged layout produced by the build: the same bin/64bit and data the
+  # installer has to reproduce under ProgramData.
+  set(TMD_INSTALLER_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/installer-stage/${_name}")
+  set(TMD_INSTALLER_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/release")
+
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/build-aux/installer-Windows.iss.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/installer-Windows.iss"
+    @ONLY
+  )
+
+  if(TMD_ISCC)
+    add_custom_target(
+      installer
+      COMMAND "${CMAKE_COMMAND}" -E rm -rf "${TMD_INSTALLER_SOURCE_DIR}"
+      COMMAND
+        "${CMAKE_COMMAND}" -E copy_directory "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${_name}"
+        "${TMD_INSTALLER_SOURCE_DIR}/data"
+      COMMAND
+        "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:${CMAKE_PROJECT_NAME}>"
+        "${TMD_INSTALLER_SOURCE_DIR}/bin/64bit/${_name}.dll"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${TMD_INSTALLER_OUTPUT_DIR}"
+      COMMAND "${TMD_ISCC}" "${CMAKE_CURRENT_BINARY_DIR}/installer-Windows.iss"
+      DEPENDS ${CMAKE_PROJECT_NAME}
+      COMMENT "Building the Windows installer"
+      VERBATIM
+    )
+  else()
+    message(STATUS "Inno Setup not found: the 'installer' target is unavailable (the plugin still builds)")
+  endif()
+endif()
+
 # The signer test links only against the signer and the hash it uses: no OBS, no
 # Qt, no third-party crypto. That keeps the highest-risk code verifiable without
 # a full plugin build.

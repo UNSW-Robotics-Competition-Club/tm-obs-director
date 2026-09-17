@@ -111,3 +111,22 @@ runs:
         }
 
         .github/scripts/Package-Windows.ps1 @PackageArgs
+
+    - name: Build Windows Installer 📥
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        # Build the Inno Setup installer alongside the zip.
+        #
+        # The zip leaves an operator to put the files in the one folder OBS reads
+        # and no other, which is the mistake this plugin's own history records.
+        # GitHub's Windows images ship Inno Setup, so this costs a build step and
+        # no new dependency; CMake skips the target when ISCC is absent, which is
+        # why a local build without Inno Setup still works.
+        $Iscc = Get-Command ISCC -ErrorAction SilentlyContinue
+        if ( $null -eq $Iscc ) {
+          Write-Warning 'Inno Setup (ISCC) not found on this runner; skipping the installer.'
+          exit 0
+        }
+
+        cmake --build --preset windows-ci-x64 --target installer

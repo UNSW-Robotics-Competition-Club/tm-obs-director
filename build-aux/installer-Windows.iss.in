@@ -1,0 +1,114 @@
+; Windows installer for TM Director.
+;
+; Configured by CMake into build_x64/installer-Windows.iss; edit this file, never
+; the generated one.
+;
+; There is exactly one correct place for an OBS plugin on Windows, and it is not
+; the one people guess: OBS reads %ProgramData%\obs-studio\plugins and never
+; %APPDATA%. A plugin in the wrong folder is not rejected with a message, it is
+; never looked at. Removing that guess is most of why this installer exists.
+
+#define AppName "@TMD_INSTALLER_DISPLAY_NAME@"
+#define AppVersion "@TMD_INSTALLER_VERSION@"
+#define AppPublisher "@TMD_INSTALLER_PUBLISHER@"
+#define AppURL "@TMD_INSTALLER_URL@"
+#define ModuleName "@TMD_INSTALLER_MODULE@"
+#define SourceDir "@TMD_INSTALLER_SOURCE_DIR@"
+#define OutputDir "@TMD_INSTALLER_OUTPUT_DIR@"
+
+[Setup]
+AppId={{9F2C1E64-4B7A-4E3D-9A42-7C1E5B0A6D18}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
+AppPublisherURL={#AppURL}
+AppSupportURL={#AppURL}
+VersionInfoVersion={#AppVersion}
+
+; ProgramData needs elevation, and the whole point is installing where OBS looks.
+PrivilegesRequired=admin
+DefaultDirName={commonappdata}\obs-studio\plugins\{#ModuleName}
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+DirExistsWarning=no
+UsePreviousAppDir=no
+
+OutputDir={#OutputDir}
+OutputBaseFilename={#ModuleName}-{#AppVersion}-windows-x64-installer
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
+UninstallDisplayName={#AppName} {#AppVersion}
+LicenseFile={#SourceDir}\..\..\LICENSE
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Files]
+Source: "{#SourceDir}\bin\64bit\{#ModuleName}.dll"; DestDir: "{app}\bin\64bit"; Flags: ignoreversion
+Source: "{#SourceDir}\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; The plugin was called obs-tm-director before the move to UNSW RCC. OBS loads
+; every plugin it finds, so leaving the old folder in place means two docks and
+; two sets of scene switches competing over the same match.
+Type: filesandordirs; Name: "{commonappdata}\obs-studio\plugins\obs-tm-director"
+
+[Code]
+function ObsIsRunning(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  { tasklist exits 0 either way, so the filter's own output is the answer. FI
+    matches obs64.exe and obs32.exe without caring which. }
+  Result := False;
+  if Exec(ExpandConstant('{cmd}'),
+          '/C tasklist /FI "IMAGENAME eq obs*.exe" 2>NUL | find /I "obs" >NUL',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Result := (ResultCode = 0);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if ObsIsRunning() then
+  begin
+    { Windows will not replace a DLL that OBS has loaded. Caught here, with the
+      reason, rather than as a permission error halfway through copying. }
+    if MsgBox('OBS Studio is running.' + #13#10 + #13#10 +
+              'Windows cannot replace a plugin while OBS has it open. Close OBS, ' +
+              'then press Retry.' + #13#10 + #13#10 +
+              'Press Cancel to stop the installation.',
+              mbError, MB_RETRYCANCEL) = IDRETRY then
+      Result := InitializeSetup()
+    else
+      Result := False;
+  end;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  if ObsIsRunning() then
+  begin
+    MsgBox('OBS Studio is running.' + #13#10 + #13#10 +
+           'Close OBS before uninstalling, or the plugin file will be left behind.',
+           mbError, MB_OK);
+    Result := False;
+  end;
+end;
+
+[UninstallDelete]
+; The plugin's own folder, once its files are gone.
+Type: dirifempty; Name: "{app}\bin\64bit"
+Type: dirifempty; Name: "{app}\bin"
+Type: dirifempty; Name: "{app}\data"
+Type: dirifempty; Name: "{app}"
+
+[Messages]
+; Settings live in the operator's profile and are deliberately left alone, so
+; reinstalling or upgrading never costs someone their scene mapping mid-event.
+FinishedLabel=%1 has been installed.%n%nYour settings and scene mapping are kept in your user profile and were not touched. Start OBS and open the TM Director dock.
