@@ -61,21 +61,6 @@ std::string configDirectory()
 	return directory;
 }
 
-/// Where settings lived when the plugin was called obs-tm-director.
-///
-/// obs_module_config_path is derived from the module's name, so renaming the
-/// plugin silently moved the settings directory and left every existing install
-/// looking freshly installed - address, API key, field set and every scene
-/// mapping gone. The old path is a sibling of the new one.
-std::string legacyConfigPath()
-{
-	const std::string directory = configDirectory();
-	const size_t slash = directory.find_last_of("/\\");
-	if (slash == std::string::npos)
-		return {};
-	return directory.substr(0, slash) + "/obs-tm-director/" + kFileName;
-}
-
 } // namespace
 
 std::string directorSettingsPath()
@@ -142,19 +127,6 @@ bool loadDirectorSettings(DirectorSettings &out)
 		return false;
 
 	ObsDataPtr root(obs_data_create_from_json_file_safe(path.c_str(), "bak"));
-
-	// Nothing under the current name: this is either a first run or an install
-	// that predates the rename. Reading the old file costs one stat and saves an
-	// operator reconfiguring everything at a venue.
-	bool migrated = false;
-	if (!root) {
-		const std::string legacy = legacyConfigPath();
-		if (!legacy.empty()) {
-			root.reset(obs_data_create_from_json_file_safe(legacy.c_str(), "bak"));
-			migrated = static_cast<bool>(root);
-		}
-	}
-
 	if (!root)
 		return false;
 
@@ -204,12 +176,6 @@ bool loadDirectorSettings(DirectorSettings &out)
 			out.rules.fields.push_back(rule);
 		}
 	}
-
-	// Written straight back under the new name, so the migration happens once
-	// rather than on every load, and the old file is left alone in case someone
-	// puts the previous build back.
-	if (migrated)
-		saveDirectorSettings(out);
 
 	return true;
 }
