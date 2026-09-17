@@ -28,6 +28,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QHBoxLayout>
 #include <QMetaObject>
 #include <QScrollArea>
+#include <QSplitter>
+#include <QToolButton>
 
 namespace tmd {
 
@@ -77,9 +79,25 @@ QSpinBox *makeSecondsBox(const QString &suffix)
 TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(parent), director_(director)
 {
 	auto *layout = new QVBoxLayout(this);
-	layout->addWidget(buildConnectionGroup());
-	layout->addWidget(buildRulesGroup(), 1);
-	layout->addWidget(buildLiveGroup());
+
+	// A splitter rather than fixed proportions. How much room the scene mapping
+	// needs depends on how many fields the event has, and how much of the log an
+	// operator wants to see depends on how much they trust the automation yet -
+	// neither is something this code can pick correctly for everyone.
+	auto *splitter = new QSplitter(Qt::Vertical);
+	splitter->setChildrenCollapsible(false);
+	splitter->addWidget(buildConnectionGroup());
+	splitter->addWidget(buildRulesGroup());
+	splitter->addWidget(buildLiveGroup());
+
+	// Only the scene mapping grows when the dock is resized; the other two have a
+	// natural size and keep it.
+	splitter->setStretchFactor(0, 0);
+	splitter->setStretchFactor(1, 1);
+	splitter->setStretchFactor(2, 0);
+	splitter->setSizes({200, 560, 220});
+
+	layout->addWidget(splitter);
 
 	connect(director_, &Director::linkChanged, this, &TmDirectorDock::onLinkChanged);
 	connect(director_, &Director::stateChanged, this, &TmDirectorDock::onStateChanged);
@@ -158,6 +176,18 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	defaults->addWidget(defaultDelay_);
 	defaults->addWidget(defaultMinHold_);
 	defaults->addStretch(1);
+
+	collapseAll_ = new QToolButton();
+	collapseAll_->setCheckable(true);
+	collapseAll_->setAutoRaise(true);
+	collapseAll_->setText(tr("Collapse all"));
+	collapseAll_->setToolTip(tr("Fold every field down to its name."));
+	connect(collapseAll_, &QToolButton::toggled, this, [this](bool collapsed) {
+		collapseAll_->setText(collapsed ? tr("Expand all") : tr("Collapse all"));
+		setAllFieldsCollapsed(collapsed);
+	});
+	defaults->addWidget(collapseAll_);
+
 	outer->addLayout(defaults);
 
 	auto *scroll = new QScrollArea();
@@ -203,6 +233,10 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	log_ = new QPlainTextEdit();
 	log_->setReadOnly(true);
 	log_->setMaximumBlockCount(200);
+	// Enough to see the last few things that happened without crowding out the
+	// scene mapping. Drag the splitter for more.
+	log_->setMinimumHeight(60);
+	log_->setMaximumHeight(120);
 	form->addRow(log_);
 
 	return group;
@@ -250,11 +284,19 @@ void TmDirectorDock::populateSceneCombo(QComboBox *combo, const QString &keep) c
 	combo->setCurrentIndex(combo->count() - 1);
 }
 
+void TmDirectorDock::setAllFieldsCollapsed(bool collapsed)
+{
+	for (FieldRow &row : rows_) {
+		if (row.header != nullptr)
+			row.header->setChecked(!collapsed);
+	}
+}
+
 void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 {
 	for (FieldRow &row : rows_) {
-		if (row.defaultScene != nullptr)
-			row.defaultScene->parentWidget()->deleteLater();
+		if (row.container != nullptr)
+			row.container->deleteLater();
 	}
 	rows_.clear();
 
@@ -265,8 +307,37 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		row.fieldId = field.id;
 		row.name = QString::fromStdString(field.name);
 
-		auto *box = new QGroupBox(row.name.isEmpty() ? tr("Field %1").arg(field.id) : row.name);
-		auto *grid = new QGridLayout(box);
+		const QString title = row.name.isEmpty() ? tr("Field %1").arg(field.id) : row.name;
+
+		row.container = new QWidget();
+		auto *stack = new QVBoxLayout(row.container);
+		stack->setContentsMargins(0, 0, 0, 0);
+		stack->setSpacing(0);
+
+		// A header that folds the field away, rather than a QGroupBox. A checkable
+		// QGroupBox would give the same arrow for free, but its checkbox means
+		// "enabled", and an operator who collapsed a field to get it out of the way
+		// would have switched it off instead.
+		row.header = new QToolButton();
+		row.header->setText(title);
+		row.header->setCheckable(true);
+		row.header->setChecked(true);
+		row.header->setArrowType(Qt::DownArrow);
+		row.header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		row.header->setAutoRaise(true);
+		row.header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+		stack->addWidget(row.header);
+
+		row.body = new QWidget();
+		auto *grid = new QGridLayout(row.body);
+		stack->addWidget(row.body);
+
+		QToolButton *header = row.header;
+		QWidget *body = row.body;
+		connect(header, &QToolButton::toggled, body, [header, body](bool expanded) {
+			body->setVisible(expanded);
+			header->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+		});
 
 		const FieldRule *saved = rules.findField(field.id);
 
@@ -303,7 +374,7 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		grid->addLayout(timing, kTriggerCount + 1, 0, 1, 2);
 
 		// Ahead of the trailing stretch, so rows stack from the top.
-		fieldsLayout_->insertWidget(fieldsLayout_->count() - 1, box);
+		fieldsLayout_->insertWidget(fieldsLayout_->count() - 1, row.container);
 		rows_.push_back(row);
 	}
 
@@ -313,6 +384,11 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 	noFields_->setVisible(rows_.empty());
 	if (rows_.empty() && !fields.empty())
 		noFields_->setText(tr("TM reported no fields for this field set."));
+
+	// A rebuild replaces every header, so the button would otherwise still claim
+	// everything is collapsed while the new rows are all open.
+	if (collapseAll_ != nullptr && collapseAll_->isChecked())
+		setAllFieldsCollapsed(true);
 }
 
 void TmDirectorDock::loadFromSettings()

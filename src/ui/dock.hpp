@@ -27,6 +27,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QSplitter>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -40,6 +42,17 @@ namespace tmd {
 struct FieldRow {
 	int fieldId = 0;
 	QString name;
+
+	/// Everything for this field, so a rebuild deletes one widget rather than
+	/// having to find the right ancestor of a combo box.
+	QWidget *container = nullptr;
+
+	/// Click target that collapses the field. An event with six fields is six
+	/// blocks of five pickers, and an operator watching one field should not have
+	/// to scroll past the other five.
+	QToolButton *header = nullptr;
+	QWidget *body = nullptr;
+
 	QComboBox *defaultScene = nullptr;
 	QComboBox *triggerScene[kTriggerCount] = {};
 	QSpinBox *delay = nullptr;
@@ -84,6 +97,7 @@ private:
 	DirectorSettings collectSettings() const;
 
 	void rebuildFieldRows(const std::vector<Field> &fields);
+	void setAllFieldsCollapsed(bool collapsed);
 	void populateSceneCombo(QComboBox *combo, const QString &keep) const;
 
 	/// Runs a blocking TM call off the UI thread.
@@ -108,6 +122,7 @@ private:
 	QSpinBox *defaultDelay_ = nullptr;
 	QSpinBox *defaultMinHold_ = nullptr;
 	QVBoxLayout *fieldsLayout_ = nullptr;
+	QToolButton *collapseAll_ = nullptr;
 
 	/// Stands in for the field rows before TM has been asked for any. An empty
 	/// box says nothing about whether the plugin is broken or simply has not been
