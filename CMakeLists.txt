@@ -37,21 +37,6 @@ if(ENABLE_QT)
   )
 endif()
 
-# mbedTLS supplies HMAC-SHA256 for TM API request signing. It arrives with the
-# prebuilt obs-deps bundle on every platform and exports its own CMake config
-# package, so this adds no new dependency for anyone building the plugin.
-# Only mbedcrypto is needed — mbedtls_md_hmac lives there, not in libmbedtls.
-find_package(MbedTLS REQUIRED)
-
-# The upstream config package already brings in ws2_32 and bcrypt, but the
-# prebuilt mbedcrypto.lib still references the legacy __imp_fopen / __imp_fread /
-# __imp_ferror ... exports that the modern UCRT no longer surfaces. Without this
-# the link dies with ~10 LNK2019s that look like an mbedTLS problem and are not.
-set(TMD_CRYPTO_LIBS MbedTLS::mbedcrypto)
-if(MSVC)
-  list(APPEND TMD_CRYPTO_LIBS legacy_stdio_definitions)
-endif()
-
 # libcurl for HTTP, nlohmann/json for parsing. Both ship in the obs-deps bundle,
 # so neither adds a dependency for anyone building the plugin. nlohmann is
 # header-only and has no config package in the bundle, hence find_path.
@@ -62,6 +47,7 @@ find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp REQUIRED)
 # own. Keep it that way: anything needing OBS belongs in src/ui or src/engine.
 set(
   TMD_TM_SOURCES
+  src/tm/sha256.cpp
   src/tm/tm-signer.cpp
   src/tm/tm-types.cpp
   src/tm/tm-events.cpp
@@ -167,18 +153,18 @@ target_sources(
   PRIVATE src/plugin-main.cpp ${TMD_TM_SOURCES} ${TMD_ENGINE_SOURCES} ${TMD_UI_SOURCES}
 )
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE CURL::libcurl Threads::Threads)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${NLOHMANN_JSON_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
-# The signer test links only against tm-signer.cpp and mbedTLS: no OBS, no Qt.
-# That keeps the highest-risk code verifiable without a full plugin build.
+# The signer test links only against the signer and the hash it uses: no OBS, no
+# Qt, no third-party crypto. That keeps the highest-risk code verifiable without
+# a full plugin build.
 if(ENABLE_TESTS)
   enable_testing()
 
-  add_executable(test-signer test/test-signer.cpp src/tm/tm-signer.cpp)
-  target_link_libraries(test-signer PRIVATE ${TMD_CRYPTO_LIBS})
+  add_executable(test-signer test/test-signer.cpp src/tm/tm-signer.cpp src/tm/sha256.cpp)
   target_include_directories(test-signer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src")
   set_target_properties(test-signer PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
@@ -200,7 +186,7 @@ if(ENABLE_TESTS)
   # the mock on an ephemeral port, runs this binary against it, and shuts it
   # down, so the test is hermetic and needs no TM, no LAN, and no credentials.
   add_executable(test-tm-client test/test-tm-client.cpp ${TMD_TM_SOURCES})
-  target_link_libraries(test-tm-client PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
+  target_link_libraries(test-tm-client PRIVATE CURL::libcurl Threads::Threads)
   target_include_directories(
     test-tm-client
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src" ${NLOHMANN_JSON_INCLUDE_DIR}
@@ -210,7 +196,7 @@ if(ENABLE_TESTS)
   # Same idea one layer up: the mock speaks RFC 6455 by hand, so this exercises
   # the real handshake, the real framing, and a real yanked connection.
   add_executable(test-field-set-socket test/test-field-set-socket.cpp ${TMD_TM_SOURCES})
-  target_link_libraries(test-field-set-socket PRIVATE ${TMD_CRYPTO_LIBS} CURL::libcurl Threads::Threads)
+  target_link_libraries(test-field-set-socket PRIVATE CURL::libcurl Threads::Threads)
   target_include_directories(
     test-field-set-socket
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/src" ${NLOHMANN_JSON_INCLUDE_DIR}

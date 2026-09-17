@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "tm-signer.hpp"
 
-#include <mbedtls/md.h>
+#include "tm/sha256.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,7 +35,6 @@ namespace {
 constexpr const char *kSchemeSeparator = "://";
 constexpr int kDefaultHttpPort = 80;
 constexpr int kDefaultHttpsPort = 443;
-constexpr size_t kSha256DigestBytes = 32;
 
 const std::array<const char *, 7> kDayNames = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const std::array<const char *, 12> kMonthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -124,29 +123,6 @@ std::string buildStringToSign(const std::string &method, const SignableUrl &url,
 {
 	return method + "\n" + url.pathAndQuery + "\n" + "token:" + bearerToken + "\n" + "host:" + url.host + "\n" +
 	       "x-tm-date:" + tmDate + "\n";
-}
-
-std::string hmacSha256Hex(const std::string &key, const std::string &message)
-{
-	const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-	if (info == nullptr)
-		return {};
-
-	unsigned char digest[kSha256DigestBytes] = {0};
-	const int result = mbedtls_md_hmac(info, reinterpret_cast<const unsigned char *>(key.data()), key.length(),
-					   reinterpret_cast<const unsigned char *>(message.data()), message.length(),
-					   digest);
-	if (result != 0)
-		return {};
-
-	std::string hex;
-	hex.reserve(kSha256DigestBytes * 2);
-	for (size_t i = 0; i < kSha256DigestBytes; ++i) {
-		char pair[3] = {0};
-		std::snprintf(pair, sizeof(pair), "%02x", digest[i]);
-		hex.append(pair);
-	}
-	return hex;
 }
 
 std::string signRequest(const std::string &method, const std::string &url, const std::string &bearerToken,

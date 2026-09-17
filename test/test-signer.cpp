@@ -9,6 +9,7 @@ This is the highest-risk code in the plugin. A wrong signature surfaces as a
 event day, with no useful diagnostics. Pin it hard.
 */
 
+#include "../src/tm/sha256.hpp"
 #include "../src/tm/tm-signer.hpp"
 
 #include <cstdio>
@@ -144,12 +145,57 @@ void testFailureModes()
 		   tmd::signRequest("GET", "http://tm.local/api/event", "tok", "date", "key").length() == 64);
 }
 
+/// The published vectors, so the hash is checked against the standard rather
+/// than only against our own recorded output. FIPS 180-4 for SHA-256, RFC 4231
+/// for HMAC-SHA256.
+void testPublishedCryptoVectors()
+{
+	std::printf("-- published SHA-256 and HMAC vectors --\n");
+
+	auto hashHex = [](const std::string &message) {
+		return tmd::toHex(tmd::sha256(reinterpret_cast<const uint8_t *>(message.data()), message.size()));
+	};
+
+	// FIPS 180-4 appendix B.
+	expectEqual("sha256(\"abc\")", hashHex("abc"),
+		    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+	// The empty string exercises the padding path with nothing to copy.
+	expectEqual("sha256(\"\")", hashHex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+	// 56 bytes: one byte too long to fit its own length, so padding spills into
+	// a second block. The classic off-by-one in a hand-written SHA-256.
+	expectEqual("sha256(56 bytes)", hashHex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+		    "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+	// 64 bytes: exactly one block of message, so the padding block is entirely
+	// padding.
+	expectEqual("sha256(64 bytes)", hashHex(std::string(64, 'a')),
+		    "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb");
+
+	// RFC 4231 case 1.
+	expectEqual("hmac rfc4231 case 1", tmd::hmacSha256Hex(std::string(20, static_cast<char>(0x0b)), "Hi There"),
+		    "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
+	// Case 2: a short key, and the one everyone recognises.
+	expectEqual("hmac rfc4231 case 2", tmd::hmacSha256Hex("Jefe", "what do ya want for nothing?"),
+		    "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+	// Case 3: key and message both longer than a block.
+	expectEqual("hmac rfc4231 case 3",
+		    tmd::hmacSha256Hex(std::string(20, static_cast<char>(0xaa)),
+				       std::string(50, static_cast<char>(0xdd))),
+		    "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe");
+	// Case 6: a 131-byte key, which must be hashed down before use. This is the
+	// branch that silently produces a wrong signature if it is missing.
+	expectEqual("hmac rfc4231 case 6 (long key)",
+		    tmd::hmacSha256Hex(std::string(131, static_cast<char>(0xaa)),
+				       "Test Using Larger Than Block-Size Key - Hash Key First"),
+		    "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
+}
+
 } // namespace
 
 int main()
 {
 	std::printf("== tm-signer ==\n");
 
+	testPublishedCryptoVectors();
 	testGoldenVectors();
 	testHostPortNormalisation();
 	testRejectsMalformedUrls();
