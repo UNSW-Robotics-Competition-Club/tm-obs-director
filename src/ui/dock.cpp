@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QColor>
 #include <QDateTime>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -362,6 +363,23 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	sceneLabel_ = new QLabel();
 	form->addRow(tr("Last switch"), sceneLabel_);
 
+	matchLogEnabled_ = new QCheckBox(tr("Write a match CSV"));
+	matchLogEnabled_->setToolTip(tr("One row per played match: number, start, end, and where it falls in the "
+					"stream and the recording."));
+	form->addRow(matchLogEnabled_);
+
+	auto *matchLogRow = new QHBoxLayout();
+	matchLogPath_ = new QLineEdit();
+	matchLogPath_->setPlaceholderText(QString::fromStdString(defaultMatchLogPath()));
+	matchLogBrowse_ = new QPushButton(tr("Browse..."));
+	matchLogRow->addWidget(matchLogPath_, 1);
+	matchLogRow->addWidget(matchLogBrowse_);
+	form->addRow(matchLogRow);
+
+	connect(matchLogEnabled_, &QCheckBox::toggled, this, &TmDirectorDock::onMatchLogToggled);
+	connect(matchLogBrowse_, &QPushButton::clicked, this, &TmDirectorDock::onBrowseMatchLog);
+	connect(matchLogPath_, &QLineEdit::editingFinished, this, &TmDirectorDock::onSave);
+
 	log_ = new QPlainTextEdit();
 	log_->setReadOnly(true);
 	log_->setMaximumBlockCount(200);
@@ -583,6 +601,8 @@ void TmDirectorDock::loadFromSettings()
 	address_->setText(QString::fromStdString(settings.tmAddress));
 	apiKey_->setText(QString::fromStdString(settings.tmApiKey));
 	enabled_->setChecked(settings.rules.enabled);
+	matchLogEnabled_->setChecked(settings.matchLogEnabled);
+	matchLogPath_->setText(QString::fromStdString(settings.matchLogPath));
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
 
@@ -612,6 +632,9 @@ DirectorSettings TmDirectorDock::collectSettings() const
 
 	const QVariant fieldSet = fieldSet_->currentData();
 	settings.fieldSetId = fieldSet.isValid() ? fieldSet.toInt() : 0;
+
+	settings.matchLogEnabled = matchLogEnabled_->isChecked();
+	settings.matchLogPath = matchLogPath_->text().trimmed().toStdString();
 
 	settings.rules.enabled = enabled_->isChecked();
 	settings.rules.defaultDelayMs = defaultDelay_->value() * 1000;
@@ -644,8 +667,7 @@ void TmDirectorDock::runAsync(std::function<void()> work)
 	setBusy(true);
 	worker_ = std::thread([this, work]() {
 		work();
-		QMetaObject::invokeMethod(
-			this, [this]() { setBusy(false); }, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(this, [this]() { setBusy(false); }, Qt::QueuedConnection);
 	});
 }
 
@@ -685,8 +707,8 @@ void TmDirectorDock::onTestConnection()
 					// The remedy is for the operator; the detail is for
 					// whoever they forward the log to, so it goes in plain
 					// rather than competing with the coloured line above it.
-					appendLog(QStringLiteral("%1 (%2)")
-							  .arg(QString::fromUtf8(tmErrorName(error)), detailText),
+					appendLog(QStringLiteral("%1 (%2)").arg(QString::fromUtf8(tmErrorName(error)),
+										detailText),
 						  tmd::LogLevel::Info);
 					return;
 				}
@@ -701,8 +723,7 @@ void TmDirectorDock::onTestConnection()
 				if (index >= 0)
 					fieldSet_->setCurrentIndex(index);
 
-				appendLog(tr("Connected. %1 field set(s).").arg(fieldSets.size()),
-					  tmd::LogLevel::Good);
+				appendLog(tr("Connected. %1 field set(s).").arg(fieldSets.size()), tmd::LogLevel::Good);
 				onReloadFields();
 			},
 			Qt::QueuedConnection);
@@ -762,6 +783,34 @@ void TmDirectorDock::onEnabledToggled(bool enabled)
 		return;
 	onSave();
 	appendLog(enabled ? tr("Automation on") : tr("Automation off"), tmd::LogLevel::Info);
+}
+
+void TmDirectorDock::onMatchLogToggled(bool enabled)
+{
+	if (loading_)
+		return;
+	onSave();
+
+	const QString path = matchLogPath_->text().trimmed().isEmpty() ? QString::fromStdString(defaultMatchLogPath())
+								       : matchLogPath_->text().trimmed();
+	// Naming the file is the point: "writing a CSV" somewhere unstated is not
+	// something anyone can go and find afterwards.
+	appendLog(enabled ? tr("Match CSV on: %1").arg(path) : tr("Match CSV off"), tmd::LogLevel::Info);
+}
+
+void TmDirectorDock::onBrowseMatchLog()
+{
+	const QString current = matchLogPath_->text().trimmed().isEmpty()
+					? QString::fromStdString(defaultMatchLogPath())
+					: matchLogPath_->text().trimmed();
+
+	const QString chosen =
+		QFileDialog::getSaveFileName(this, tr("Match CSV"), current, tr("CSV files (*.csv);;All files (*)"));
+	if (chosen.isEmpty())
+		return;
+
+	matchLogPath_->setText(chosen);
+	onSave();
 }
 
 void TmDirectorDock::onLinkChanged()

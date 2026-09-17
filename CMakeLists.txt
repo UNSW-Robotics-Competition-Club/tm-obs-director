@@ -148,7 +148,12 @@ set_property(
 # event calls for, and when the switch actually happens. Like the TM client it
 # stays free of libobs and Qt, so all of that is testable against a fake clock
 # rather than against a stopwatch and a running OBS.
-set(TMD_ENGINE_SOURCES src/engine/fieldset-state.cpp src/engine/rules.cpp src/engine/scheduler.cpp)
+set(TMD_ENGINE_SOURCES
+    src/engine/fieldset-state.cpp
+    src/engine/rules.cpp
+    src/engine/scheduler.cpp
+    src/engine/match-log.cpp
+)
 
 # FieldSetSocket runs its own thread. Explicit on Linux, a no-op on Windows.
 find_package(Threads REQUIRED)

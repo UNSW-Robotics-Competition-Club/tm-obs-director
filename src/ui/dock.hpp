@@ -83,6 +83,8 @@ private slots:
 	void onReloadFields();
 	void onSave();
 	void onEnabledToggled(bool enabled);
+	void onMatchLogToggled(bool enabled);
+	void onBrowseMatchLog();
 
 	void onLinkChanged();
 	void onStateChanged();
@@ -151,6 +153,10 @@ private:
 	/// box says nothing about whether the plugin is broken or simply has not been
 	/// pointed at an event yet.
 	QLabel *noFields_ = nullptr;
+
+	QCheckBox *matchLogEnabled_ = nullptr;
+	QLineEdit *matchLogPath_ = nullptr;
+	QPushButton *matchLogBrowse_ = nullptr;
 
 	QLabel *linkLabel_ = nullptr;
 	QLabel *matchLabel_ = nullptr;

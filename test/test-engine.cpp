@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 // is the only reason the awkward cases below can be tested at all.
 
 #include "src/engine/fieldset-state.hpp"
+#include "src/engine/match-log.hpp"
 #include "src/engine/rules.hpp"
 #include "src/engine/scheduler.hpp"
 
@@ -359,6 +360,132 @@ void testReset()
 	check("and owes no hold to anything", scheduler.poll(200).value_or("") == "C");
 }
 
+// --- match log -------------------------------------------------------------
+
+tmd::FieldsetState queuedMatch(int fieldId, const std::string &round, int instance, int match)
+{
+	return tmd::reduceFieldsetState(tmd::FieldsetState{}, assigned(fieldId, round, instance, match), 0);
+}
+
+void testMatchLogPairing()
+{
+	std::cout << "match log: a match start paired with its stop\n";
+
+	tmd::MatchLog log;
+	const tmd::FieldsetState state = queuedMatch(2, "QUAL", 1, 12);
+
+	check("starting opens a row, closing nothing", !log.started(state, 2, 1000, 5000, 9000).has_value());
+	check("a match is open", log.hasOpenMatch());
+
+	const auto row = log.stopped(106000);
+	check("stopping yields the row", row.has_value());
+	check("labelled", row && row->label == "Q12", row ? row->label : "(none)");
+	check("carries the match number", row && row->match == 12);
+	check("and the field", row && row->fieldId == 2);
+	check("duration is the gap", row && row->endedAtMs - row->startedAtMs == 105000);
+	check("offsets are kept", row && row->streamOffsetMs == 5000 && row->recordOffsetMs == 9000);
+	check("nothing is left open", !log.hasOpenMatch());
+
+	check("a second stop yields nothing", !log.stopped(120000).has_value());
+}
+
+void testMatchLogSupersede()
+{
+	std::cout << "match log: a match that never stopped\n";
+
+	tmd::MatchLog log;
+	log.started(queuedMatch(1, "QUAL", 1, 5), 1, 1000, -1, -1);
+
+	// TM moved on without a stop. The first match is closed out rather than
+	// dropped: a row with no end time is still evidence it ran.
+	const auto superseded = log.started(queuedMatch(1, "QUAL", 1, 6), 1, 50000, -1, -1);
+	check("the abandoned match is handed back", superseded.has_value());
+	check("it is the first one", superseded && superseded->match == 5);
+	check("with no end time", superseded && superseded->endedAtMs == 0);
+
+	const auto row = log.stopped(160000);
+	check("the newer match still logs normally", row && row->match == 6);
+}
+
+void testMatchLogIgnoresTimeouts()
+{
+	std::cout << "match log: timeouts are not matches\n";
+
+	tmd::MatchLog log;
+
+	tmd::TmEvent empty;
+	empty.type = tmd::TmEventType::FieldMatchAssigned;
+	empty.fieldId = 1;
+	empty.hasMatch = false;
+	const tmd::FieldsetState timeout = tmd::reduceFieldsetState(tmd::FieldsetState{}, empty, 0);
+
+	check("a timeout opens nothing", !log.started(timeout, 1, 1000, -1, -1).has_value());
+	check("nothing is open", !log.hasOpenMatch());
+	check("its stop yields nothing", !log.stopped(60000).has_value());
+
+	// A timeout called mid-match still closes the match out.
+	log.started(queuedMatch(1, "QUAL", 1, 7), 1, 100000, -1, -1);
+	const auto closed = log.started(timeout, 1, 150000, -1, -1);
+	check("a timeout closes an open match", closed && closed->match == 7);
+	check("and opens nothing itself", !log.hasOpenMatch());
+}
+
+void testMatchLogClose()
+{
+	std::cout << "match log: closing mid-match\n";
+
+	tmd::MatchLog log;
+	check("closing with nothing open yields nothing", !log.close().has_value());
+
+	log.started(queuedMatch(3, "QF", 2, 1), 3, 1000, -1, -1);
+	const auto row = log.close();
+	check("hands back the open match", row && row->label == "QF 2-1", row ? row->label : "(none)");
+	check("with no end time", row && row->endedAtMs == 0);
+	check("and closes it", !log.hasOpenMatch());
+}
+
+void testCsvFormatting()
+{
+	std::cout << "match log: CSV\n";
+
+	check("header names every column",
+	      tmd::csvHeader() ==
+		      "match,round,division,instance,match_number,field,started,ended,duration_s,stream_offset,record_offset");
+
+	tmd::MatchLogRow row;
+	row.label = "Q12";
+	row.round = "QUAL";
+	row.division = 1;
+	row.instance = 1;
+	row.match = 12;
+	row.fieldId = 2;
+	row.startedAtMs = 1600000000000;
+	row.endedAtMs = 1600000105000;
+	row.streamOffsetMs = 3661000; // 01:01:01
+	row.recordOffsetMs = -1;
+
+	const std::string line = tmd::csvRow(row);
+	check("starts with the label", line.rfind("Q12,QUAL,1,1,12,2,", 0) == 0, line);
+	check("duration in whole seconds", line.find(",105,") != std::string::npos, line);
+	check("offset as hh:mm:ss for a chapter list", line.find("01:01:01") != std::string::npos, line);
+	// An output that was not running leaves the cell empty rather than writing a
+	// zero, which would read as "right at the start".
+	check("an inactive output is an empty cell", line.substr(line.size() - 1) == ",", line);
+
+	tmd::MatchLogRow awkward;
+	awkward.label = "Field 1, red side";
+	awkward.round = "He said \"go\"";
+	const std::string escaped = tmd::csvRow(awkward);
+	check("a comma is quoted", escaped.find("\"Field 1, red side\"") != std::string::npos, escaped);
+	check("a quote is doubled", escaped.find("\"He said \"\"go\"\"\"") != std::string::npos, escaped);
+
+	tmd::MatchLogRow unfinished;
+	unfinished.label = "Q13";
+	unfinished.startedAtMs = 1600000000000;
+	const std::string open = tmd::csvRow(unfinished);
+	check("a match with no end leaves end and duration empty", open.find(",,,") != std::string::npos, open);
+}
+
 } // namespace
 
 int main()
@@ -376,6 +503,11 @@ int main()
 	testHoldAndDelayCompose();
 	testRepeatedScene();
 	testReset();
+	testMatchLogPairing();
+	testMatchLogSupersede();
+	testMatchLogIgnoresTimeouts();
+	testMatchLogClose();
+	testCsvFormatting();
 
 	if (g_failures == 0) {
 		std::cout << "\nall engine tests passed\n";

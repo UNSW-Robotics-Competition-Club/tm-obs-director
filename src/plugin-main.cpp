@@ -41,8 +41,13 @@ void onFrontendEvent(enum obs_frontend_event event, void *)
 		// arriving early would find nothing to switch to.
 		if (g_dock != nullptr)
 			g_dock->refreshScenes();
-		if (g_director != nullptr)
+		if (g_director != nullptr) {
+			// Already streaming when OBS finished loading - a restart mid-event -
+			// still needs a start time, or every offset reads as absent.
+			g_director->noteStreamingActive(obs_frontend_streaming_active());
+			g_director->noteRecordingActive(obs_frontend_recording_active());
 			g_director->start();
+		}
 		break;
 
 	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
@@ -51,6 +56,25 @@ void onFrontendEvent(enum obs_frontend_event event, void *)
 		// rather than dropped, which is handled inside the dock.
 		if (g_dock != nullptr)
 			g_dock->refreshScenes();
+		break;
+
+	// Offsets for the match CSV are measured from these, so a row can say where
+	// in the stream and in the recording a match falls.
+	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
+		if (g_director != nullptr)
+			g_director->noteStreamingActive(true);
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
+		if (g_director != nullptr)
+			g_director->noteStreamingActive(false);
+		break;
+	case OBS_FRONTEND_EVENT_RECORDING_STARTED:
+		if (g_director != nullptr)
+			g_director->noteRecordingActive(true);
+		break;
+	case OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+		if (g_director != nullptr)
+			g_director->noteRecordingActive(false);
 		break;
 
 	case OBS_FRONTEND_EVENT_EXIT:

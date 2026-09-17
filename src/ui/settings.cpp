@@ -71,6 +71,14 @@ std::string directorSettingsPath()
 	return directory + "/" + kFileName;
 }
 
+std::string defaultMatchLogPath()
+{
+	const std::string directory = configDirectory();
+	if (directory.empty())
+		return {};
+	return directory + "/match-log.csv";
+}
+
 bool saveDirectorSettings(const DirectorSettings &settings)
 {
 	const std::string directory = configDirectory();
@@ -88,6 +96,8 @@ bool saveDirectorSettings(const DirectorSettings &settings)
 	obs_data_set_string(root.get(), "tmApiKey", settings.tmApiKey.c_str());
 	obs_data_set_int(root.get(), "fieldSetId", settings.fieldSetId);
 	obs_data_set_string(root.get(), "cerberusEndpoint", settings.cerberusEndpoint.c_str());
+	obs_data_set_bool(root.get(), "matchLogEnabled", settings.matchLogEnabled);
+	obs_data_set_string(root.get(), "matchLogPath", settings.matchLogPath.c_str());
 
 	obs_data_set_bool(root.get(), "enabled", settings.rules.enabled);
 	obs_data_set_int(root.get(), "defaultDelayMs", settings.rules.defaultDelayMs);
@@ -129,6 +139,8 @@ bool loadDirectorSettings(DirectorSettings &out)
 	out.tmApiKey = obs_data_get_string(root.get(), "tmApiKey");
 	out.fieldSetId = static_cast<int>(obs_data_get_int(root.get(), "fieldSetId"));
 	out.cerberusEndpoint = obs_data_get_string(root.get(), "cerberusEndpoint");
+	out.matchLogEnabled = obs_data_get_bool(root.get(), "matchLogEnabled");
+	out.matchLogPath = obs_data_get_string(root.get(), "matchLogPath");
 
 	out.rules = RuleSet{};
 	out.rules.enabled = obs_data_get_bool(root.get(), "enabled");

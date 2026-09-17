@@ -45,8 +45,20 @@ struct DirectorSettings {
 	/// Empty means the endpoint this build was compiled with.
 	std::string cerberusEndpoint;
 
+	/// Write a row per played match: number, start, end, and where it falls in
+	/// the stream and the recording. Off by default - it writes a file, and a
+	/// plugin that writes files nobody asked for is a plugin people stop
+	/// installing.
+	bool matchLogEnabled = false;
+
+	/// Empty means the default beside the settings file.
+	std::string matchLogPath;
+
 	RuleSet rules;
 };
+
+/// Where the match CSV goes when the operator has not chosen somewhere.
+std::string defaultMatchLogPath();
 
 /// Reads the saved settings. False when there is nothing saved yet, which is the
 /// ordinary first-run case and not an error.

@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "engine/fieldset-state.hpp"
+#include "engine/match-log.hpp"
 #include "engine/scheduler.hpp"
 #include "tm/field-set-socket.hpp"
 #include "tm/tm-api-client.hpp"
@@ -82,6 +83,13 @@ public:
 	/// The scene the automation last switched to. Empty until it switches one.
 	QString lastScene() const;
 
+	/// Told by the frontend when an output starts or stops, so a match row can
+	/// say where in the stream and in the recording the match falls. Offsets are
+	/// measured from these rather than asked of the output, because an output that
+	/// has just stopped no longer has an answer.
+	void noteStreamingActive(bool active);
+	void noteRecordingActive(bool active);
+
 	/// Blocking calls for the dock's own worker thread. They share one
 	/// TmApiClient with the socket thread, so they take the same lock.
 	TmError testConnection(std::string &detail);
@@ -113,6 +121,13 @@ private:
 	void armTimer();
 	void switchScene(const QString &scene);
 
+	/// Writes one finished match to the CSV, if that is switched on.
+	void recordMatch(const MatchLogRow &row);
+
+	/// Milliseconds into each output, or -1 when it is not running.
+	int64_t streamOffsetMs() const;
+	int64_t recordOffsetMs() const;
+
 	TmConfig tmConfigFor(const DirectorSettings &settings) const;
 
 	DirectorSettings settings_;
@@ -128,6 +143,16 @@ private:
 
 	FieldsetState state_;
 	SwitchScheduler scheduler_;
+	MatchLog matchLog_;
+
+	/// Wall clock when each output started, zero when it is not running.
+	int64_t streamStartedMs_ = 0;
+	int64_t recordStartedMs_ = 0;
+
+	/// Said once per session rather than once per match: a CSV that cannot be
+	/// written fails identically every time, and forty identical red lines bury
+	/// everything else in the log.
+	bool matchLogFailed_ = false;
 	QTimer timer_;
 
 	SocketState linkState_ = SocketState::Disconnected;

@@ -113,10 +113,9 @@ QString Director::lastScene() const
 
 bool Director::applySettings(const DirectorSettings &settings)
 {
-	const bool connectionChanged = settings.tmAddress != settings_.tmAddress ||
-				       settings.tmApiKey != settings_.tmApiKey ||
-				       settings.fieldSetId != settings_.fieldSetId ||
-				       settings.cerberusEndpoint != settings_.cerberusEndpoint;
+	const bool connectionChanged =
+		settings.tmAddress != settings_.tmAddress || settings.tmApiKey != settings_.tmApiKey ||
+		settings.fieldSetId != settings_.fieldSetId || settings.cerberusEndpoint != settings_.cerberusEndpoint;
 
 	settings_ = settings;
 
@@ -162,8 +161,7 @@ void Director::start()
 		// Hop to the Qt main thread. Everything downstream of here touches
 		// engine state or libobs, and neither is safe from the socket thread.
 		TmEvent copy = event;
-		QMetaObject::invokeMethod(
-			this, [this, copy]() { handleEvent(copy); }, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(this, [this, copy]() { handleEvent(copy); }, Qt::QueuedConnection);
 	});
 
 	socket_->setStateHandler([this](SocketState state, const std::string &detail) {
@@ -177,6 +175,11 @@ void Director::start()
 
 void Director::stop()
 {
+	// A match still running when OBS closes is still a match that happened; it
+	// just has no end time.
+	if (const auto open = matchLog_.close())
+		recordMatch(*open);
+
 	if (socket_) {
 		socket_->stop();
 		socket_.reset();
@@ -219,8 +222,20 @@ void Director::handleSocketState(SocketState state, const QString &detail)
 
 void Director::handleEvent(const TmEvent &event)
 {
-	state_ = reduceFieldsetState(state_, event, nowMs());
+	const int64_t now = nowMs();
+	state_ = reduceFieldsetState(state_, event, now);
 	emit stateChanged();
+
+	// After the reducer, not before: the row wants the match the state machine
+	// has just settled on, including the timeout inference.
+	if (event.type == TmEventType::MatchStarted) {
+		if (const auto superseded =
+			    matchLog_.started(state_, event.fieldId, now, streamOffsetMs(), recordOffsetMs()))
+			recordMatch(*superseded);
+	} else if (event.type == TmEventType::MatchStopped) {
+		if (const auto finished = matchLog_.stopped(now))
+			recordMatch(*finished);
+	}
 
 	const auto decision = settings_.rules.resolve(event);
 	if (!decision) {
@@ -280,6 +295,50 @@ void Director::switchScene(const QString &scene)
 	obs_log(LOG_INFO, "switched to scene '%s'", scene.toUtf8().constData());
 	emit activity(tr("Switched to \"%1\"").arg(scene), LogLevel::Info);
 	emit stateChanged();
+}
+
+void Director::noteStreamingActive(bool active)
+{
+	streamStartedMs_ = active ? nowMs() : 0;
+}
+
+void Director::noteRecordingActive(bool active)
+{
+	recordStartedMs_ = active ? nowMs() : 0;
+}
+
+int64_t Director::streamOffsetMs() const
+{
+	return streamStartedMs_ > 0 ? nowMs() - streamStartedMs_ : -1;
+}
+
+int64_t Director::recordOffsetMs() const
+{
+	return recordStartedMs_ > 0 ? nowMs() - recordStartedMs_ : -1;
+}
+
+void Director::recordMatch(const MatchLogRow &row)
+{
+	if (!settings_.matchLogEnabled)
+		return;
+
+	const std::string path = settings_.matchLogPath.empty() ? defaultMatchLogPath() : settings_.matchLogPath;
+
+	std::string error;
+	if (appendMatchCsv(path, row, error)) {
+		matchLogFailed_ = false;
+		emit activity(tr("Logged %1 to the match CSV").arg(QString::fromStdString(row.label)), LogLevel::Info);
+		return;
+	}
+
+	obs_log(LOG_WARNING, "match log: %s", error.c_str());
+	if (matchLogFailed_)
+		return;
+
+	// Once, then quiet. A path that cannot be written fails the same way for
+	// every match, and a red line per match would bury the rest of the log.
+	matchLogFailed_ = true;
+	emit activity(tr("Could not write the match CSV: %1").arg(QString::fromStdString(error)), LogLevel::Bad);
 }
 
 TmError Director::testConnection(std::string &detail)
