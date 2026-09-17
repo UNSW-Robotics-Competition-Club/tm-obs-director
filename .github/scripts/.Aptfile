@@ -5,7 +5,9 @@ package 'jq'
 package 'ninja-build', bin: 'ninja'
 package 'pkg-config'
 
-# libcurl is a dependency of the plugin itself, not of the build tooling. Windows
-# and macOS get it from the obs-deps bundle; on Linux the template expects system
-# packages, and the runner has the runtime but not the headers.
+# Dependencies of the plugin itself, not of the build tooling. Windows and macOS
+# take both from the obs-deps bundle; on Linux the template expects system
+# packages, and the runner carries libcurl's runtime without its headers and no
+# nlohmann/json at all.
 package 'libcurl4-openssl-dev'
+package 'nlohmann-json3-dev'
