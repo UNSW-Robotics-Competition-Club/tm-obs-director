@@ -34,6 +34,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace tmd {
 
+/// How much attention a log line deserves.
+///
+/// The split that matters is Warn against Bad: a warning clears on its own if
+/// you wait (the socket is already retrying, the venue's uplink came back),
+/// where a bad line stays bad until somebody does something. An operator
+/// glancing at a wall of text needs to know which of those they are looking at
+/// without reading it.
+enum class LogLevel {
+	Info, ///< Routine: an event arrived, a scene was switched.
+	Good, ///< Something that was broken now works.
+	Warn, ///< Broken, but retrying, and it may fix itself.
+	Bad,  ///< Broken, and it will stay broken until someone acts.
+};
+
 /// Joins the three worlds: TM's socket, the engine's decisions, and OBS.
 ///
 /// Everything here after the socket handler runs on the Qt main thread. That is
@@ -83,7 +97,7 @@ signals:
 
 	/// One line for the dock's activity log: an event seen, a switch made, a
 	/// switch skipped and why.
-	void activity(const QString &line);
+	void activity(const QString &line, tmd::LogLevel level);
 
 private slots:
 	/// Hands whatever is due to OBS. Driven by a single-shot timer armed for the

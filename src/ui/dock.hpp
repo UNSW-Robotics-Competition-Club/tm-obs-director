@@ -28,6 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -86,7 +87,7 @@ private slots:
 
 	void onLinkChanged();
 	void onStateChanged();
-	void onActivity(const QString &line);
+	void onActivity(const QString &line, tmd::LogLevel level);
 
 private:
 	QWidget *buildConnectionGroup();
@@ -104,7 +105,13 @@ private:
 	/// to say. A word-wrapped label reserves its row even while empty, which is
 	/// dead space at the top of the dock for as long as nobody has pressed Test
 	/// connection.
-	void setConnectionStatus(const QString &text);
+	void setConnectionStatus(const QString &text, tmd::LogLevel level);
+
+	/// Appends one coloured line to the activity log.
+	void appendLog(const QString &line, tmd::LogLevel level);
+
+	/// Shows a connection result in the status line and copies it to the log.
+	void reportConnection(const QString &message, tmd::LogLevel level);
 
 	/// Runs a blocking TM call off the UI thread.
 	///
@@ -134,6 +141,12 @@ private:
 	/// box says nothing about whether the plugin is broken or simply has not been
 	/// pointed at an event yet.
 	QLabel *noFields_ = nullptr;
+
+	/// Clears the connection status line a few seconds after it appears. The
+	/// message has already been copied into the log by then, so nothing is lost -
+	/// this only stops a stale "Connected." sitting there hours later looking like
+	/// it still means something.
+	QTimer statusTimer_;
 
 	QLabel *linkLabel_ = nullptr;
 	QLabel *matchLabel_ = nullptr;

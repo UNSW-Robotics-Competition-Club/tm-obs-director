@@ -205,7 +205,15 @@ void Director::handleSocketState(SocketState state, const QString &detail)
 	// stopped at 2pm, the log is the only thing that can answer.
 	obs_log(LOG_INFO, "link %s", line.toUtf8().constData());
 
-	emit activity(line);
+	LogLevel level = LogLevel::Info;
+	if (state == SocketState::Connected)
+		level = LogLevel::Good;
+	else if (state == SocketState::Reconnecting)
+		// Not Bad: the socket is already retrying with backoff, and a blip that
+		// recovers on its own should not read the same as a wrong API key.
+		level = LogLevel::Warn;
+
+	emit activity(line, level);
 	emit linkChanged();
 }
 
@@ -216,7 +224,7 @@ void Director::handleEvent(const TmEvent &event)
 
 	const auto decision = settings_.rules.resolve(event);
 	if (!decision) {
-		emit activity(describeEvent(event) + tr(" - no rule"));
+		emit activity(describeEvent(event) + tr(" - no rule"), LogLevel::Info);
 		return;
 	}
 
@@ -225,7 +233,7 @@ void Director::handleEvent(const TmEvent &event)
 	QString note = describeEvent(event) + tr(" - switching to \"%1\"").arg(QString::fromStdString(decision->scene));
 	if (decision->delayMs > 0)
 		note += tr(" after %1 ms").arg(decision->delayMs);
-	emit activity(note);
+	emit activity(note, LogLevel::Info);
 
 	armTimer();
 	pumpScheduler();
@@ -260,7 +268,8 @@ void Director::switchScene(const QString &scene)
 		// nothing.
 		const QString line = tr("Scene \"%1\" does not exist - nothing switched").arg(scene);
 		obs_log(LOG_WARNING, "%s", line.toUtf8().constData());
-		emit activity(line);
+		// Bad, not Warn: a renamed scene does not come back by waiting.
+		emit activity(line, LogLevel::Bad);
 		return;
 	}
 
@@ -269,7 +278,7 @@ void Director::switchScene(const QString &scene)
 
 	lastScene_ = scene;
 	obs_log(LOG_INFO, "switched to scene '%s'", scene.toUtf8().constData());
-	emit activity(tr("Switched to \"%1\"").arg(scene));
+	emit activity(tr("Switched to \"%1\"").arg(scene), LogLevel::Info);
 	emit stateChanged();
 }
 

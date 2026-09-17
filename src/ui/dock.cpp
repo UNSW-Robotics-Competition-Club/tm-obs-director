@@ -59,6 +59,48 @@ QStringList currentSceneNames()
 	return names;
 }
 
+/// Colours that hold up on both OBS's dark themes and its light ones. Picked for
+/// contrast against either ground rather than taken from a palette role, because
+/// a log line has to stay legible whichever theme the operator runs.
+QString colourFor(tmd::LogLevel level)
+{
+	switch (level) {
+	case tmd::LogLevel::Good:
+		return QStringLiteral("#2ea043");
+	case tmd::LogLevel::Warn:
+		return QStringLiteral("#bb8009");
+	case tmd::LogLevel::Bad:
+		return QStringLiteral("#d1242f");
+	case tmd::LogLevel::Info:
+		break;
+	}
+	return QString();
+}
+
+/// Which failures an operator can wait out, and which need somebody to act.
+///
+/// Anything upstream of the venue - no uplink, the sign-in service unreachable,
+/// rate limiting - is a warning: it is not wrong, it is just not working yet.
+/// A wrong key or a disabled API is red, because waiting will not fix it.
+tmd::LogLevel levelFor(tmd::TmError error)
+{
+	switch (error) {
+	case tmd::TmError::None:
+		return tmd::LogLevel::Good;
+
+	case tmd::TmError::HostUnreachable:
+	case tmd::TmError::CerberusUnreachable:
+	case tmd::TmError::AuthHostUnreachable:
+	case tmd::TmError::CerberusRateLimited:
+	case tmd::TmError::TokenExpired:
+	case tmd::TmError::HttpError:
+		return tmd::LogLevel::Warn;
+
+	default:
+		return tmd::LogLevel::Bad;
+	}
+}
+
 QString sceneFromCombo(const QComboBox *combo)
 {
 	const QVariant data = combo->currentData();
@@ -122,6 +164,13 @@ TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(pa
 
 	layout->addWidget(splitter);
 
+	statusTimer_.setSingleShot(true);
+	statusTimer_.setInterval(5000);
+	connect(&statusTimer_, &QTimer::timeout, this, [this]() {
+		connectionStatus_->clear();
+		connectionStatus_->hide();
+	});
+
 	connect(director_, &Director::linkChanged, this, &TmDirectorDock::onLinkChanged);
 	connect(director_, &Director::stateChanged, this, &TmDirectorDock::onStateChanged);
 	connect(director_, &Director::activity, this, &TmDirectorDock::onActivity);
@@ -164,9 +213,13 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	auto *buttons = new QHBoxLayout();
 	test_ = new QPushButton(tr("Test connection"));
 	reloadFields_ = new QPushButton(tr("Reload fields"));
-	buttons->addWidget(test_);
-	buttons->addWidget(reloadFields_);
-	buttons->addStretch(1);
+	// Equal halves of the dock's width rather than their text width plus a
+	// stretch. They are the two things anyone reaches for here, and a button that
+	// fills its half is easier to hit than one hugging its label.
+	test_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	reloadFields_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	buttons->addWidget(test_, 1);
+	buttons->addWidget(reloadFields_, 1);
 	form->addRow(buttons);
 
 	connectionStatus_ = new QLabel();
@@ -271,10 +324,43 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	return group;
 }
 
-void TmDirectorDock::setConnectionStatus(const QString &text)
+void TmDirectorDock::setConnectionStatus(const QString &text, tmd::LogLevel level)
 {
 	connectionStatus_->setText(text);
 	connectionStatus_->setVisible(!text.isEmpty());
+
+	const QString colour = colourFor(level);
+	connectionStatus_->setStyleSheet(colour.isEmpty() ? QString()
+							  : QStringLiteral("color: %1;").arg(colour));
+
+	// The same message is in the log, with a timestamp, so clearing this one
+	// loses nothing. Leaving it would mean a "Connected." from three hours ago
+	// still sitting there next to a link that has since dropped.
+	statusTimer_.stop();
+	if (!text.isEmpty())
+		statusTimer_.start();
+}
+
+void TmDirectorDock::reportConnection(const QString &message, tmd::LogLevel level)
+{
+	setConnectionStatus(message, level);
+	// Copied rather than only shown: the status line clears itself after a few
+	// seconds, and the log is what is still there when someone asks what happened.
+	appendLog(message, level);
+}
+
+void TmDirectorDock::appendLog(const QString &line, tmd::LogLevel level)
+{
+	const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+	// Escaped, not interpolated: TM's own error bodies come through here and a
+	// stray angle bracket would otherwise eat the rest of the line.
+	const QString body = line.toHtmlEscaped();
+	const QString colour = colourFor(level);
+
+	if (colour.isEmpty())
+		log_->appendHtml(QStringLiteral("%1 %2").arg(stamp, body));
+	else
+		log_->appendHtml(QStringLiteral("%1 <span style=\"color:%2;\">%3</span>").arg(stamp, colour, body));
 }
 
 void TmDirectorDock::refreshScenes()
@@ -429,7 +515,7 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 	}
 
 	if (fields.empty())
-		onActivity(tr("TM reported no fields for this field set."));
+		appendLog(tr("TM reported no fields for this field set."), tmd::LogLevel::Warn);
 
 	noFields_->setVisible(rows_.empty());
 	if (rows_.empty() && !fields.empty())
@@ -528,7 +614,7 @@ void TmDirectorDock::onTestConnection()
 	// been given is a good way to debug the wrong thing.
 	onSave();
 
-	setConnectionStatus(tr("Testing..."));
+	setConnectionStatus(tr("Testing..."), tmd::LogLevel::Info);
 
 	runAsync([this]() {
 		std::string detail;
@@ -546,12 +632,14 @@ void TmDirectorDock::onTestConnection()
 		QMetaObject::invokeMethod(
 			this,
 			[this, error, remedy, detailText, fieldSets]() {
-				setConnectionStatus(remedy);
+				reportConnection(remedy, levelFor(error));
 				if (error != TmError::None) {
 					// The remedy is for the operator; the detail is for
-					// whoever they forward the log to.
-					onActivity(QStringLiteral("%1 (%2)")
-							   .arg(QString::fromUtf8(tmErrorName(error)), detailText));
+					// whoever they forward the log to, so it goes in plain
+					// rather than competing with the coloured line above it.
+					appendLog(QStringLiteral("%1 (%2)")
+							  .arg(QString::fromUtf8(tmErrorName(error)), detailText),
+						  tmd::LogLevel::Info);
 					return;
 				}
 
@@ -565,7 +653,8 @@ void TmDirectorDock::onTestConnection()
 				if (index >= 0)
 					fieldSet_->setCurrentIndex(index);
 
-				onActivity(tr("Connected. %1 field set(s).").arg(fieldSets.size()));
+				appendLog(tr("Connected. %1 field set(s).").arg(fieldSets.size()),
+					  tmd::LogLevel::Good);
 				onReloadFields();
 			},
 			Qt::QueuedConnection);
@@ -597,7 +686,7 @@ void TmDirectorDock::onReloadFields()
 			this,
 			[this, error, remedy, fields]() {
 				if (error != TmError::None) {
-					setConnectionStatus(remedy);
+					reportConnection(remedy, levelFor(error));
 					return;
 				}
 				rebuildFieldRows(fields);
@@ -613,7 +702,8 @@ void TmDirectorDock::onSave()
 		return;
 
 	if (!director_->applySettings(collectSettings()))
-		onActivity(tr("Could not write settings to %1").arg(QString::fromStdString(directorSettingsPath())));
+		appendLog(tr("Could not write settings to %1").arg(QString::fromStdString(directorSettingsPath())),
+			  tmd::LogLevel::Bad);
 
 	director_->start();
 }
@@ -623,7 +713,7 @@ void TmDirectorDock::onEnabledToggled(bool enabled)
 	if (loading_)
 		return;
 	onSave();
-	onActivity(enabled ? tr("Automation on") : tr("Automation off"));
+	appendLog(enabled ? tr("Automation on") : tr("Automation off"), tmd::LogLevel::Info);
 }
 
 void TmDirectorDock::onLinkChanged()
@@ -647,9 +737,9 @@ void TmDirectorDock::onStateChanged()
 	sceneLabel_->setText(director_->lastScene().isEmpty() ? tr("none yet") : director_->lastScene());
 }
 
-void TmDirectorDock::onActivity(const QString &line)
+void TmDirectorDock::onActivity(const QString &line, tmd::LogLevel level)
 {
-	log_->appendPlainText(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss ")) + line);
+	appendLog(line, level);
 }
 
 } // namespace tmd
