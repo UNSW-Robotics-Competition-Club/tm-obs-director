@@ -138,6 +138,13 @@ turn it straight back on.
 **Collapse all** folds every field down to its name, for events with more fields
 than fit on screen.
 
+Each of the three sections - **Tournament Manager**, **Scenes** and **Live** -
+also folds on its own: click its heading. Tournament Manager keeps its two
+buttons when folded, and Scenes keeps **Automation on**, so the controls you need
+mid-match stay on screen. The dock remembers which sections are folded. When the
+dock is shorter than what is open, it scrolls rather than squeezing the docks
+around it.
+
 The same link state also goes to OBS's own log, so it can be read after the event
 from `%APPDATA%\obs-studio\logs\`.
 

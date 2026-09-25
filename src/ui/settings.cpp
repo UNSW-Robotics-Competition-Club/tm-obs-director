@@ -99,6 +99,8 @@ bool saveDirectorSettings(const DirectorSettings &settings)
 	obs_data_set_bool(root.get(), "matchLogEnabled", settings.matchLogEnabled);
 	obs_data_set_string(root.get(), "matchLogPath", settings.matchLogPath.c_str());
 	obs_data_set_bool(root.get(), "connectionCollapsed", settings.connectionCollapsed);
+	obs_data_set_bool(root.get(), "scenesCollapsed", settings.scenesCollapsed);
+	obs_data_set_bool(root.get(), "liveCollapsed", settings.liveCollapsed);
 
 	obs_data_set_bool(root.get(), "enabled", settings.rules.enabled);
 	obs_data_set_int(root.get(), "defaultDelayMs", settings.rules.defaultDelayMs);
@@ -143,6 +145,8 @@ bool loadDirectorSettings(DirectorSettings &out)
 	out.matchLogEnabled = obs_data_get_bool(root.get(), "matchLogEnabled");
 	out.matchLogPath = obs_data_get_string(root.get(), "matchLogPath");
 	out.connectionCollapsed = obs_data_get_bool(root.get(), "connectionCollapsed");
+	out.scenesCollapsed = obs_data_get_bool(root.get(), "scenesCollapsed");
+	out.liveCollapsed = obs_data_get_bool(root.get(), "liveCollapsed");
 
 	out.rules = RuleSet{};
 	out.rules.enabled = obs_data_get_bool(root.get(), "enabled");
