@@ -632,6 +632,10 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		auto *grid = new QGridLayout(row.body);
 		grid->setContentsMargins(12, 2, 0, 6);
 		grid->setVerticalSpacing(3);
+		// Spare width to the pickers. Left to itself the grid splits it between
+		// both columns, so the labels got half the row and the pickers started
+		// in the middle of it.
+		grid->setColumnStretch(1, 1);
 		stack->addWidget(row.body);
 
 		QAbstractButton *header = row.header;
@@ -669,7 +673,6 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 			populateSceneCombo(combo, saved ? QString::fromStdString(saved->sceneFor[t]) : QString());
 		}
 
-		auto *timing = new QHBoxLayout();
 		row.delay = makeSecondsBox();
 		row.minHold = makeSecondsBox();
 		// -1 in the model means "inherit". The UI says so in words instead, since
@@ -680,12 +683,13 @@ void TmDirectorDock::rebuildFieldRows(const std::vector<Field> &fields)
 		row.minHold->setMinimum(-1);
 		row.delay->setValue(saved && saved->delayMs >= 0 ? saved->delayMs / 1000 : -1);
 		row.minHold->setValue(saved && saved->minHoldMs >= 0 ? saved->minHoldMs / 1000 : -1);
-		timing->addWidget(new QLabel(tr("Delay")));
-		timing->addWidget(row.delay);
-		timing->addWidget(new QLabel(tr("Hold")));
-		timing->addWidget(row.minHold);
-		timing->addStretch(1);
-		grid->addLayout(timing, kTriggerCount + 1, 0, 1, 2);
+		// Rows of the same grid as the pickers, not one row of their own. Squeezed
+		// onto one line, the labels sat hard against the box before them, and
+		// neither box lined up with anything above it.
+		grid->addWidget(new QLabel(tr("Delay")), kTriggerCount + 1, 0);
+		grid->addWidget(row.delay, kTriggerCount + 1, 1);
+		grid->addWidget(new QLabel(tr("Hold")), kTriggerCount + 2, 0);
+		grid->addWidget(row.minHold, kTriggerCount + 2, 1);
 
 		// Ahead of the trailing stretch, so rows stack from the top.
 		fieldsLayout_->insertWidget(fieldsLayout_->count() - 1, row.container);
