@@ -140,13 +140,18 @@ private:
 	void runAsync(std::function<void()> work);
 	void setBusy(bool busy);
 
+	/// Relabels and recolours the automation button to match its state.
+	void showAutomationState();
+
 	Director *director_ = nullptr;
 
 	QLineEdit *address_ = nullptr;
 	QLineEdit *apiKey_ = nullptr;
 	QComboBox *fieldSet_ = nullptr;
 	QPushButton *test_ = nullptr;
-	QPushButton *reloadFields_ = nullptr;
+	/// Automation on/off, beside Test connection. Checkable, and carries its
+	/// state the same way: in its label and a wash of colour.
+	QPushButton *enabled_ = nullptr;
 	QPushButton *save_ = nullptr;
 
 	/// Collapses the address, key and field set, leaving the two buttons. Those
@@ -156,10 +161,10 @@ private:
 	QAbstractButton *connectionHeader_ = nullptr;
 	QWidget *connectionBody_ = nullptr;
 
-	/// The three sections fold independently. Scenes keeps its Automation on
-	/// switch when folded, because that is the one control an operator reaches
-	/// for mid-match; Live folds away entirely, since the Test connection button
-	/// already carries the link state.
+	/// The three sections fold independently. Tournament Manager keeps its two
+	/// buttons when folded, so the automation switch is always on screen; Live
+	/// folds away entirely, since the Test connection button already carries the
+	/// link state.
 	QVBoxLayout *sections_ = nullptr;
 	QGroupBox *rulesGroup_ = nullptr;
 	QAbstractButton *rulesHeader_ = nullptr;
@@ -167,7 +172,6 @@ private:
 	QAbstractButton *liveHeader_ = nullptr;
 	QWidget *liveBody_ = nullptr;
 
-	QCheckBox *enabled_ = nullptr;
 	QSpinBox *defaultDelay_ = nullptr;
 	QSpinBox *defaultMinHold_ = nullptr;
 	QVBoxLayout *fieldsLayout_ = nullptr;

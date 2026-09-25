@@ -131,17 +131,19 @@ The **Live** section is how you tell working from stuck:
 - **The log** — every event received and what was done about it, including
   `- no rule` when nothing was mapped.
 
-**Automation on** is the switch to reach for when you need to take manual control
-mid-match. It stops all switching and changes none of your mapping, so you can
-turn it straight back on.
+**Automation on / off** - the button beside **Test connection** - is the switch
+to reach for when you need to take manual control mid-match. It is green while
+the plugin is switching and amber while it is not. Turning it off stops all
+switching and changes none of your mapping, so you can turn it straight back on.
+It works even while a connection test is still running.
 
 **Collapse all** folds every field down to its name, for events with more fields
 than fit on screen.
 
 Each of the three sections - **Tournament Manager**, **Scenes** and **Live** -
 also folds on its own: click its heading. Tournament Manager keeps its two
-buttons when folded, and Scenes keeps **Automation on**, so the controls you need
-mid-match stay on screen. The dock remembers which sections are folded. When the
+buttons when folded, so **Automation on / off** stays on screen whatever else is
+folded. The dock remembers which sections are folded. When the
 dock is shorter than what is open, it scrolls rather than squeezing the docks
 around it.
 
