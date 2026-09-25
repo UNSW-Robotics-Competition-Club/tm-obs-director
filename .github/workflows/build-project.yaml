@@ -136,6 +136,10 @@ jobs:
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
+        env:
+          # Read by CMake at configure time. Never echoed: CMake prints only the
+          # key's length, and GitHub masks the value anywhere else it appears.
+          TMD_CERBERUS_KEY: ${{ secrets.TMD_CERBERUS_KEY }}
         with:
           target: macos-universal
           config: ${{ needs.check-event.outputs.config }}
@@ -213,6 +217,10 @@ jobs:
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
+        env:
+          # Read by CMake at configure time. Never echoed: CMake prints only the
+          # key's length, and GitHub masks the value anywhere else it appears.
+          TMD_CERBERUS_KEY: ${{ secrets.TMD_CERBERUS_KEY }}
         with:
           target: x86_64
           config: ${{ needs.check-event.outputs.config }}
@@ -279,6 +287,10 @@ jobs:
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
+        env:
+          # Read by CMake at configure time. Never echoed: CMake prints only the
+          # key's length, and GitHub masks the value anywhere else it appears.
+          TMD_CERBERUS_KEY: ${{ secrets.TMD_CERBERUS_KEY }}
         with:
           target: x64
           config: ${{ needs.check-event.outputs.config }}

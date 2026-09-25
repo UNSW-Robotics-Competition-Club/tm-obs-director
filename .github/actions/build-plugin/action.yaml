@@ -27,6 +27,29 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Check Cerberus Key 🔑
+      shell: bash
+      run: |
+        # A keyless build compiles, installs and loads, and only then says it
+        # cannot sign in - on a venue laptop, which is the worst place to find
+        # out. So a missing key is loud here: an annotation on every run, and a
+        # failure on a tag, since a tag becomes a release people install.
+        #
+        # The caller passes the key in as TMD_CERBERUS_KEY from the repository
+        # secret of the same name. Fork pull requests never get secrets, which
+        # is why an untagged run only warns.
+        if [[ -n "${TMD_CERBERUS_KEY}" ]]; then
+          echo "Cerberus key present (${#TMD_CERBERUS_KEY} characters)."
+          exit 0
+        fi
+
+        message='No TMD_CERBERUS_KEY secret: this build cannot sign in to Tournament Manager.'
+        if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          echo "::error::${message}"
+          exit 1
+        fi
+        echo "::warning::${message}"
+
     - name: Run macOS Build
       if: runner.os == 'macOS'
       shell: zsh --no-rcs --errexit --pipefail {0}
