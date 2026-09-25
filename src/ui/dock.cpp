@@ -125,6 +125,11 @@ QString testButtonStyle(tmd::LogLevel level)
 	return QStringLiteral("QPushButton { background-color: %1; color: %2; }"
 			      "QPushButton:hover { background-color: %3; }"
 			      "QPushButton:pressed { background-color: %4; }"
+			      // Checked is restated too, for the automation button: OBS themes
+			      // fill a checked button with the selection colour, which would
+			      // bury the wash that is the whole point of the style.
+			      "QPushButton:checked { background-color: %1; color: %2; }"
+			      "QPushButton:checked:hover { background-color: %3; }"
 			      // Held through the disabled state too, because the button is
 			      // disabled for the whole of the test it is reporting on.
 			      "QPushButton:disabled { background-color: %1; color: %2; }")
@@ -360,17 +365,22 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	auto *buttons = new QHBoxLayout();
 	buttons->setContentsMargins(0, 0, 0, 0);
 	test_ = new QPushButton(tr("Test connection"));
-	reloadFields_ = new QPushButton(tr("Reload fields"));
+	// The one control an operator reaches for mid-match, so it sits beside the
+	// connection state at the top of the dock rather than inside a section that
+	// might be folded or scrolled away. It replaced a Reload fields button: Test
+	// connection already reloads the fields, and so does picking a field set.
+	enabled_ = new QPushButton();
+	enabled_->setCheckable(true);
 	// Equal halves of the dock's width rather than their text width plus a
 	// stretch. They are the two things anyone reaches for here, and a button that
 	// fills its half is easier to hit than one hugging its label.
 	test_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	reloadFields_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	enabled_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	buttons->addWidget(test_, 1);
-	buttons->addWidget(reloadFields_, 1);
+	buttons->addWidget(enabled_, 1);
 	// Outside connectionBody_, so collapsing keeps them. They are the point of
-	// the panel once it is configured: the button carries the connection state,
-	// and Reload fields is what you press when TM's field list changes.
+	// the panel once it is configured: one says whether TM is talking, the other
+	// whether the plugin is allowed to act on it.
 	stack->addLayout(buttons);
 
 	connect(connectionHeader_, &QAbstractButton::toggled, this, &TmDirectorDock::onSectionFolded);
@@ -384,7 +394,8 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	connect(apiKey_, &QLineEdit::textEdited, this, &TmDirectorDock::clearConnectionState);
 
 	connect(test_, &QPushButton::clicked, this, &TmDirectorDock::onTestConnection);
-	connect(reloadFields_, &QPushButton::clicked, this, &TmDirectorDock::onReloadFields);
+	connect(enabled_, &QPushButton::toggled, this, &TmDirectorDock::onEnabledToggled);
+	showAutomationState();
 	connect(fieldSet_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
 		&TmDirectorDock::onFieldSetChanged);
 
@@ -396,11 +407,6 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	QVBoxLayout *outer = nullptr;
 	rulesGroup_ = makeSection(tr("Scenes"), &rulesHeader_, &outer);
 
-	// The one control an operator reaches for mid-match, so it sits above
-	// everything it governs rather than at the bottom of a scrolling list.
-	enabled_ = new QCheckBox(tr("Automation on"));
-	enabled_->setToolTip(tr("Stops all switching without changing any of the mapping below."));
-
 	collapseAll_ = new QToolButton();
 	collapseAll_->setCheckable(true);
 	collapseAll_->setAutoRaise(true);
@@ -411,17 +417,15 @@ QWidget *TmDirectorDock::buildRulesGroup()
 		setAllFieldsCollapsed(collapsed);
 	});
 
-	auto *top = new QHBoxLayout();
-	top->addWidget(enabled_);
-	top->addStretch(1);
-	top->addWidget(collapseAll_);
-	// Outside the body, so folding the section keeps it.
-	outer->addLayout(top);
-
 	rulesBody_ = new QWidget();
 	auto *body = new QVBoxLayout(rulesBody_);
 	body->setContentsMargins(0, 0, 0, 0);
 	outer->addWidget(rulesBody_, 1);
+
+	auto *top = new QHBoxLayout();
+	top->addStretch(1);
+	top->addWidget(collapseAll_);
+	body->addLayout(top);
 
 	// A form rather than one row. A dock is narrow, and a label, a spin box,
 	// another label, another spin box and a button do not fit across it - they
@@ -458,7 +462,6 @@ QWidget *TmDirectorDock::buildRulesGroup()
 
 	connect(rulesHeader_, &QAbstractButton::toggled, this, &TmDirectorDock::onSectionFolded);
 	connect(save_, &QPushButton::clicked, this, &TmDirectorDock::onSave);
-	connect(enabled_, &QCheckBox::toggled, this, &TmDirectorDock::onEnabledToggled);
 
 	return rulesGroup_;
 }
@@ -726,8 +729,7 @@ void TmDirectorDock::loadFromSettings()
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
 
-	// The field set list needs TM, so until Test connection or Reload fields has
-	// run there is only the saved id to show.
+	// The field set list needs TM, so until Test connection has run there is only the saved id to show.
 	if (fieldSet_->count() == 0 && settings.fieldSetId != 0) {
 		const QSignalBlocker blocker(fieldSet_);
 		fieldSet_->addItem(tr("Field set %1 (saved)").arg(settings.fieldSetId), settings.fieldSetId);
@@ -798,7 +800,8 @@ void TmDirectorDock::setBusy(bool busy)
 {
 	busy_.store(busy);
 	test_->setEnabled(!busy);
-	reloadFields_->setEnabled(!busy);
+	// The automation button is left alone: turning switching off is exactly
+	// what someone might need to do while a test is still waiting on TM.
 }
 
 void TmDirectorDock::onTestConnection()
@@ -900,8 +903,23 @@ void TmDirectorDock::onSave()
 	director_->start();
 }
 
+void TmDirectorDock::showAutomationState()
+{
+	const bool on = enabled_->isChecked();
+	// Worded as the state, like the Test connection button beside it, with the
+	// action on the tooltip. Green while it is switching, amber while it is not:
+	// switched off is not an error, but it is the state someone forgets to undo.
+	enabled_->setText(on ? tr("Automation on") : tr("Automation off"));
+	enabled_->setStyleSheet(testButtonStyle(on ? tmd::LogLevel::Good : tmd::LogLevel::Warn));
+	enabled_->setToolTip(on ? tr("Switching scenes automatically. Click to stop, without changing any of "
+				     "the mapping.")
+				: tr("Not switching. Click to let TM events switch scenes again."));
+}
+
 void TmDirectorDock::onEnabledToggled(bool enabled)
 {
+	// Before the loading check: a saved "off" has to look off from the start.
+	showAutomationState();
 	if (loading_)
 		return;
 	onSave();
@@ -943,10 +961,8 @@ void TmDirectorDock::applyFolds()
 
 	const bool scenes = rulesHeader_->isChecked();
 	rulesBody_->setVisible(scenes);
-	// It folds the fields, which are hidden along with it.
-	collapseAll_->setVisible(scenes);
 
-	// A folded Scenes is a header and a checkbox, and left expanding it would
+	// A folded Scenes is only its header, and left expanding it would
 	// stretch into a tall empty frame. Handing the height to the trailing stretch
 	// instead keeps every folded section packed at the top.
 	rulesGroup_->setSizePolicy(QSizePolicy::Preferred, scenes ? QSizePolicy::Expanding : QSizePolicy::Maximum);

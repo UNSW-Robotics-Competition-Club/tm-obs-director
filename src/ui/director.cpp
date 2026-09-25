@@ -128,7 +128,7 @@ bool Director::applySettings(const DirectorSettings &settings)
 	// Locked only when there is something to hand the client. A Test connection
 	// holds this mutex for its whole request - up to the full timeout on a venue
 	// with no uplink - and the dock saves on the UI thread for everything from
-	// folding a section to ticking Automation on. Taking the lock every time
+	// folding a section to turning automation off. Taking the lock every time
 	// froze the whole dock for as long as the test took.
 	if (clientChanged) {
 		std::lock_guard<std::mutex> lock(apiMutex_);
