@@ -30,7 +30,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QHBoxLayout>
 #include <QMetaObject>
 #include <QScrollArea>
-#include <QSplitter>
 #include <QToolButton>
 
 namespace tmd {
@@ -222,6 +221,25 @@ QWidget *makeFoldHeader(const QString &text, QAbstractButton **outHeader)
 	return row;
 }
 
+/// One of the dock's three panels: a frame, a fold header as its title, and
+/// whatever the caller stacks under it.
+///
+/// Untitled, because the fold header is the title. OBS themes pad the top of a
+/// group box for the title they expect it to draw, which here would be an empty
+/// strip above the real one, so that padding is taken back.
+QGroupBox *makeSection(const QString &title, QAbstractButton **outHeader, QVBoxLayout **outStack)
+{
+	auto *group = new QGroupBox();
+	group->setStyleSheet(QStringLiteral("QGroupBox { margin-top: 0px; padding-top: 2px; }"));
+
+	auto *stack = new QVBoxLayout(group);
+	stack->setSpacing(2);
+	stack->addWidget(makeFoldHeader(title, outHeader));
+
+	*outStack = stack;
+	return group;
+}
+
 QString sceneFromCombo(const QComboBox *combo)
 {
 	const QVariant data = combo->currentData();
@@ -251,14 +269,26 @@ QSpinBox *makeSecondsBox()
 TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(parent), director_(director)
 {
 	auto *layout = new QVBoxLayout(this);
-	layout->setContentsMargins(6, 6, 6, 6);
+	layout->setContentsMargins(0, 0, 0, 0);
 
-	// A splitter rather than fixed proportions. How much room the scene mapping
-	// needs depends on how many fields the event has, and how much of the log an
-	// operator wants to see depends on how much they trust the automation yet -
-	// neither is something this code can pick correctly for everyone.
-	auto *splitter = new QSplitter(Qt::Vertical);
-	splitter->setChildrenCollapsible(false);
+	// Everything scrolls, rather than the dock insisting on its full height. A
+	// dock's minimum size is a demand on the whole OBS window: with every section
+	// open this one needed most of a laptop screen, and OBS met it by crushing
+	// the docks beside it until Controls lost its buttons. Scrolling costs this
+	// dock a scroll bar when it is short, and costs the others nothing.
+	auto *scroll = new QScrollArea();
+	scroll->setObjectName(QStringLiteral("tmdDockScroll"));
+	scroll->setWidgetResizable(true);
+	scroll->setFrameShape(QFrame::NoFrame);
+	// Transparent, so the dock keeps the ground it had. OBS themes give a scroll
+	// area its own darker fill, which is right for the field list inside and
+	// wrong for the whole dock.
+	scroll->setStyleSheet(QStringLiteral("#tmdDockScroll, #tmdDockContent { background: transparent; }"));
+
+	auto *content = new QWidget();
+	content->setObjectName(QStringLiteral("tmdDockContent"));
+	sections_ = new QVBoxLayout(content);
+	sections_->setContentsMargins(6, 6, 6, 6);
 
 	QWidget *connection = buildConnectionGroup();
 	QWidget *rules = buildRulesGroup();
@@ -266,25 +296,19 @@ TmDirectorDock::TmDirectorDock(Director *director, QWidget *parent) : QWidget(pa
 
 	// Neither the connection form nor the live readout has anything to do with
 	// extra height: a form row does not grow, so surplus space in those panes just
-	// sits at the bottom of the box as a gap nobody asked for.
+	// sits at the bottom of the box as a gap nobody asked for. Scenes takes it
+	// while open - the field list is the one thing with more to show - and the
+	// trailing stretch takes it once Scenes is folded too.
 	connection->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 	live->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
-	splitter->addWidget(connection);
-	splitter->addWidget(rules);
-	splitter->addWidget(live);
+	sections_->addWidget(connection);
+	sections_->addWidget(rules, 1);
+	sections_->addWidget(live);
+	sections_->addStretch(0);
 
-	splitter->setStretchFactor(0, 0);
-	splitter->setStretchFactor(1, 1);
-	splitter->setStretchFactor(2, 0);
-
-	// Deliberately not real pixel sizes. A splitter clamps each pane to its
-	// minimum, so asking for one pixel top and bottom means "as small as you can
-	// be" and hands every remaining pixel to the mapping - which is the pane that
-	// actually has more to show when the dock is tall.
-	splitter->setSizes({1, 10000, 1});
-
-	layout->addWidget(splitter);
+	scroll->setWidget(content);
+	layout->addWidget(scroll);
 
 	connect(director_, &Director::linkChanged, this, &TmDirectorDock::onLinkChanged);
 	connect(director_, &Director::stateChanged, this, &TmDirectorDock::onStateChanged);
@@ -306,15 +330,10 @@ TmDirectorDock::~TmDirectorDock()
 
 QWidget *TmDirectorDock::buildConnectionGroup()
 {
-	auto *group = new QWidget();
-	auto *stack = new QVBoxLayout(group);
-	stack->setContentsMargins(0, 0, 0, 0);
-	stack->setSpacing(2);
-
 	// Same fold as a field block, for the same reason and so it reads the same
-	// way. A QGroupBox would have given the frame and the title for free, but not
-	// a title you can click.
-	stack->addWidget(makeFoldHeader(tr("Tournament Manager"), &connectionHeader_));
+	// way. A QGroupBox title would have been free, but not one you can click.
+	QVBoxLayout *stack = nullptr;
+	QGroupBox *group = makeSection(tr("Tournament Manager"), &connectionHeader_, &stack);
 
 	connectionBody_ = new QWidget();
 	auto *form = new QFormLayout(connectionBody_);
@@ -354,7 +373,7 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	// and Reload fields is what you press when TM's field list changes.
 	stack->addLayout(buttons);
 
-	connect(connectionHeader_, &QToolButton::toggled, this, &TmDirectorDock::onConnectionCollapsed);
+	connect(connectionHeader_, &QAbstractButton::toggled, this, &TmDirectorDock::onSectionFolded);
 
 	clearConnectionState();
 
@@ -374,8 +393,8 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 
 QWidget *TmDirectorDock::buildRulesGroup()
 {
-	auto *group = new QGroupBox(tr("Scenes"));
-	auto *outer = new QVBoxLayout(group);
+	QVBoxLayout *outer = nullptr;
+	rulesGroup_ = makeSection(tr("Scenes"), &rulesHeader_, &outer);
 
 	// The one control an operator reaches for mid-match, so it sits above
 	// everything it governs rather than at the bottom of a scrolling list.
@@ -396,7 +415,13 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	top->addWidget(enabled_);
 	top->addStretch(1);
 	top->addWidget(collapseAll_);
+	// Outside the body, so folding the section keeps it.
 	outer->addLayout(top);
+
+	rulesBody_ = new QWidget();
+	auto *body = new QVBoxLayout(rulesBody_);
+	body->setContentsMargins(0, 0, 0, 0);
+	outer->addWidget(rulesBody_, 1);
 
 	// A form rather than one row. A dock is narrow, and a label, a spin box,
 	// another label, another spin box and a button do not fit across it - they
@@ -407,10 +432,13 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	defaultMinHold_ = makeSecondsBox();
 	defaults->addRow(tr("Default delay"), defaultDelay_);
 	defaults->addRow(tr("Default hold"), defaultMinHold_);
-	outer->addLayout(defaults);
+	body->addLayout(defaults);
 
 	auto *scroll = new QScrollArea();
 	scroll->setWidgetResizable(true);
+	// Room for a field block's header and a couple of its pickers before the
+	// dock as a whole starts scrolling instead.
+	scroll->setMinimumHeight(120);
 	auto *inner = new QWidget();
 	fieldsLayout_ = new QVBoxLayout(inner);
 
@@ -423,21 +451,28 @@ QWidget *TmDirectorDock::buildRulesGroup()
 
 	fieldsLayout_->addStretch(1);
 	scroll->setWidget(inner);
-	outer->addWidget(scroll, 1);
+	body->addWidget(scroll, 1);
 
 	save_ = new QPushButton(tr("Save"));
-	outer->addWidget(save_);
+	body->addWidget(save_);
 
+	connect(rulesHeader_, &QAbstractButton::toggled, this, &TmDirectorDock::onSectionFolded);
 	connect(save_, &QPushButton::clicked, this, &TmDirectorDock::onSave);
 	connect(enabled_, &QCheckBox::toggled, this, &TmDirectorDock::onEnabledToggled);
 
-	return group;
+	return rulesGroup_;
 }
 
 QWidget *TmDirectorDock::buildLiveGroup()
 {
-	auto *group = new QGroupBox(tr("Live"));
-	auto *form = new QFormLayout(group);
+	QVBoxLayout *stack = nullptr;
+	QGroupBox *group = makeSection(tr("Live"), &liveHeader_, &stack);
+
+	liveBody_ = new QWidget();
+	auto *form = new QFormLayout(liveBody_);
+	form->setContentsMargins(0, 0, 0, 0);
+	stack->addWidget(liveBody_);
+	connect(liveHeader_, &QAbstractButton::toggled, this, &TmDirectorDock::onSectionFolded);
 
 	linkLabel_ = new QLabel();
 	linkLabel_->setWordWrap(true);
@@ -470,7 +505,7 @@ QWidget *TmDirectorDock::buildLiveGroup()
 	log_->setReadOnly(true);
 	log_->setMaximumBlockCount(200);
 	// Enough to see the last few things that happened without crowding out the
-	// scene mapping. Drag the splitter for more.
+	// scene mapping.
 	log_->setMinimumHeight(60);
 	log_->setMaximumHeight(120);
 	form->addRow(log_);
@@ -680,7 +715,9 @@ void TmDirectorDock::loadFromSettings()
 	enabled_->setChecked(settings.rules.enabled);
 	matchLogEnabled_->setChecked(settings.matchLogEnabled);
 	connectionHeader_->setChecked(!settings.connectionCollapsed);
-	connectionBody_->setVisible(!settings.connectionCollapsed);
+	rulesHeader_->setChecked(!settings.scenesCollapsed);
+	liveHeader_->setChecked(!settings.liveCollapsed);
+	applyFolds();
 	matchLogPath_->setText(QString::fromStdString(settings.matchLogPath));
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
@@ -714,6 +751,8 @@ DirectorSettings TmDirectorDock::collectSettings() const
 
 	settings.matchLogEnabled = matchLogEnabled_->isChecked();
 	settings.connectionCollapsed = !connectionHeader_->isChecked();
+	settings.scenesCollapsed = !rulesHeader_->isChecked();
+	settings.liveCollapsed = !liveHeader_->isChecked();
 	settings.matchLogPath = matchLogPath_->text().trimmed().toStdString();
 
 	settings.rules.enabled = enabled_->isChecked();
@@ -893,9 +932,26 @@ void TmDirectorDock::onBrowseMatchLog()
 	onSave();
 }
 
-void TmDirectorDock::onConnectionCollapsed(bool expanded)
+void TmDirectorDock::applyFolds()
 {
-	connectionBody_->setVisible(expanded);
+	connectionBody_->setVisible(connectionHeader_->isChecked());
+	liveBody_->setVisible(liveHeader_->isChecked());
+
+	const bool scenes = rulesHeader_->isChecked();
+	rulesBody_->setVisible(scenes);
+	// It folds the fields, which are hidden along with it.
+	collapseAll_->setVisible(scenes);
+
+	// A folded Scenes is a header and a checkbox, and left expanding it would
+	// stretch into a tall empty frame. Handing the height to the trailing stretch
+	// instead keeps every folded section packed at the top.
+	rulesGroup_->setSizePolicy(QSizePolicy::Preferred, scenes ? QSizePolicy::Expanding : QSizePolicy::Maximum);
+	sections_->setStretchFactor(rulesGroup_, scenes ? 1 : 0);
+}
+
+void TmDirectorDock::onSectionFolded()
+{
+	applyFolds();
 	if (!loading_)
 		onSave();
 }

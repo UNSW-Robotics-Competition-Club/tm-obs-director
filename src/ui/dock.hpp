@@ -28,7 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QSplitter>
+#include <QGroupBox>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -84,7 +84,7 @@ private slots:
 	void onReloadFields();
 	void onSave();
 	void onEnabledToggled(bool enabled);
-	void onConnectionCollapsed(bool expanded);
+	void onSectionFolded();
 	void onMatchLogToggled(bool enabled);
 	void onBrowseMatchLog();
 
@@ -103,6 +103,10 @@ private:
 	void rebuildFieldRows(const std::vector<Field> &fields);
 	void setAllFieldsCollapsed(bool collapsed);
 	void populateSceneCombo(QComboBox *combo, const QString &keep) const;
+
+	/// Shows or hides each section's body to match its header, and hands the
+	/// dock's spare height to whichever section can use it.
+	void applyFolds();
 
 	/// Puts the connection state on the Test connection button itself: the label
 	/// becomes the state, washed green, amber or red, with the full message on
@@ -151,6 +155,17 @@ private:
 	/// is still worth having on screen.
 	QAbstractButton *connectionHeader_ = nullptr;
 	QWidget *connectionBody_ = nullptr;
+
+	/// The three sections fold independently. Scenes keeps its Automation on
+	/// switch when folded, because that is the one control an operator reaches
+	/// for mid-match; Live folds away entirely, since the Test connection button
+	/// already carries the link state.
+	QVBoxLayout *sections_ = nullptr;
+	QGroupBox *rulesGroup_ = nullptr;
+	QAbstractButton *rulesHeader_ = nullptr;
+	QWidget *rulesBody_ = nullptr;
+	QAbstractButton *liveHeader_ = nullptr;
+	QWidget *liveBody_ = nullptr;
 
 	QCheckBox *enabled_ = nullptr;
 	QSpinBox *defaultDelay_ = nullptr;

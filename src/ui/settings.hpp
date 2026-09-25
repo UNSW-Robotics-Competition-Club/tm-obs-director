@@ -59,6 +59,10 @@ struct DirectorSettings {
 	/// OBS start would undo the point of collapsing it.
 	bool connectionCollapsed = false;
 
+	/// The same for the Scenes and Live sections, each folded on its own.
+	bool scenesCollapsed = false;
+	bool liveCollapsed = false;
+
 	RuleSet rules;
 };
 
