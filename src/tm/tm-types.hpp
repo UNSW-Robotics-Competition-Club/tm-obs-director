@@ -115,6 +115,15 @@ const char *audienceDisplayName(AudienceDisplay display);
 /// matters because TM may add screens we do not know about yet.
 bool parseAudienceDisplay(const std::string &name, AudienceDisplay &out);
 
+/// Turns an address as someone typed it into a base URL the client can use.
+///
+/// Trims it, adds "http://" when there is no scheme, and drops trailing slashes,
+/// since every request path is appended straight onto it. HTTP is the right
+/// guess: TM's Local API is plain HTTP on the venue LAN, so "192.168.1.50" or
+/// "tm-pc:8080" means exactly that. An explicit scheme, https included, is kept.
+/// Empty stays empty, so "not configured" still reads as not configured.
+std::string normalizeTmAddress(const std::string &address);
+
 struct Event {
 	std::string name;
 	std::string code; ///< RobotEvents SKU, e.g. "RE-V5RC-25-0000"

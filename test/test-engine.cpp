@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "src/engine/match-log.hpp"
 #include "src/engine/rules.hpp"
 #include "src/engine/scheduler.hpp"
+#include "src/tm/tm-types.hpp"
 
 #include <iostream>
 #include <string>
@@ -488,6 +489,18 @@ void testCsvFormatting()
 
 } // namespace
 
+void testAddressNormalising()
+{
+	using tmd::normalizeTmAddress;
+	check("bare IP gets http://", normalizeTmAddress("192.168.1.50") == "http://192.168.1.50");
+	check("host and port get http://", normalizeTmAddress("tm-pc:8080") == "http://tm-pc:8080");
+	check("http:// kept", normalizeTmAddress("http://127.0.0.1") == "http://127.0.0.1");
+	check("https:// kept", normalizeTmAddress("https://tm.example") == "https://tm.example");
+	check("trailing slashes dropped", normalizeTmAddress("http://10.0.0.2:8080//") == "http://10.0.0.2:8080");
+	check("whitespace trimmed", normalizeTmAddress("  10.0.0.2 \n") == "http://10.0.0.2");
+	check("empty stays empty", normalizeTmAddress("   ").empty());
+}
+
 int main()
 {
 	testMatchNames();
@@ -508,6 +521,7 @@ int main()
 	testMatchLogIgnoresTimeouts();
 	testMatchLogClose();
 	testCsvFormatting();
+	testAddressNormalising();
 
 	if (g_failures == 0) {
 		std::cout << "\nall engine tests passed\n";

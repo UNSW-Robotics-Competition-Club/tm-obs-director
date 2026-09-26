@@ -143,4 +143,20 @@ std::string MatchTuple::label() const
 	return round + " " + std::to_string(match);
 }
 
+std::string normalizeTmAddress(const std::string &address)
+{
+	const char *space = " \t\r\n";
+	const size_t first = address.find_first_not_of(space);
+	if (first == std::string::npos)
+		return std::string();
+	std::string out = address.substr(first, address.find_last_not_of(space) - first + 1);
+
+	if (out.find("://") == std::string::npos)
+		out.insert(0, "http://");
+
+	while (!out.empty() && out.back() == '/')
+		out.pop_back();
+	return out;
+}
+
 } // namespace tmd

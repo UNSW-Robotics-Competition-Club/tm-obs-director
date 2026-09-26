@@ -393,6 +393,14 @@ QWidget *TmDirectorDock::buildConnectionGroup()
 	connect(address_, &QLineEdit::textEdited, this, &TmDirectorDock::clearConnectionState);
 	connect(apiKey_, &QLineEdit::textEdited, this, &TmDirectorDock::clearConnectionState);
 
+	// Shown as soon as the field is left, not only applied when it is saved, so
+	// the address on screen is the one that will actually be dialled.
+	connect(address_, &QLineEdit::editingFinished, this, [this]() {
+		const QString normalised = QString::fromStdString(normalizeTmAddress(address_->text().toStdString()));
+		if (normalised != address_->text())
+			address_->setText(normalised);
+	});
+
 	connect(test_, &QPushButton::clicked, this, &TmDirectorDock::onTestConnection);
 	connect(enabled_, &QPushButton::toggled, this, &TmDirectorDock::onEnabledToggled);
 	showAutomationState();
@@ -749,7 +757,7 @@ void TmDirectorDock::loadFromSettings()
 DirectorSettings TmDirectorDock::collectSettings() const
 {
 	DirectorSettings settings = director_->settings();
-	settings.tmAddress = address_->text().trimmed().toStdString();
+	settings.tmAddress = normalizeTmAddress(address_->text().toStdString());
 	settings.tmApiKey = apiKey_->text().trimmed().toStdString();
 
 	const QVariant fieldSet = fieldSet_->currentData();
@@ -812,22 +820,40 @@ void TmDirectorDock::onTestConnection()
 
 	setConnectionState(tmd::LogLevel::Info, tr("Testing..."), tr("Asking Tournament Manager to answer."));
 
-	runAsync([this]() {
-		std::string detail;
-		const TmError error = director_->testConnection(detail);
+	// Read here, on the UI thread, because the worker must not touch widgets.
+	const int previousSet = fieldSet_->currentData().toInt();
 
-		TmError fieldSetError = TmError::None;
-		std::string fieldSetDetail;
+	// One worker run does the whole of connecting: test, list the field sets,
+	// pick one, fetch its fields. It used to hand the last step to Reload fields
+	// from the result callback - which runs while this worker still counts as
+	// busy, so the fetch was refused and the fields never appeared.
+	runAsync([this, previousSet]() {
+		std::string detail;
+		TmError error = director_->testConnection(detail);
+
 		std::vector<FieldSet> fieldSets;
 		if (error == TmError::None)
-			fieldSets = director_->fetchFieldSets(fieldSetError, fieldSetDetail);
+			fieldSets = director_->fetchFieldSets(error, detail);
+
+		// The set already chosen if TM still has it, otherwise the first. An
+		// event with one field set - most of them - is then set up by pressing
+		// one button, and one with several starts somewhere sensible.
+		int chosenSet = 0;
+		for (const FieldSet &set : fieldSets) {
+			if (chosenSet == 0 || set.id == previousSet)
+				chosenSet = set.id;
+		}
+
+		std::vector<Field> fields;
+		if (error == TmError::None && chosenSet != 0)
+			fields = director_->fetchFields(chosenSet, error, detail);
 
 		const QString remedy = QString::fromUtf8(tmErrorRemedy(error));
 		const QString detailText = QString::fromStdString(detail);
 
 		QMetaObject::invokeMethod(
 			this,
-			[this, error, remedy, detailText, fieldSets]() {
+			[this, error, remedy, detailText, fieldSets, chosenSet, fields]() {
 				reportConnection(remedy, levelFor(error));
 				if (error != TmError::None) {
 					// The remedy is for the operator; the detail is for
@@ -839,18 +865,28 @@ void TmDirectorDock::onTestConnection()
 					return;
 				}
 
-				const QSignalBlocker blocker(fieldSet_);
-				const int previous = fieldSet_->currentData().toInt();
-				fieldSet_->clear();
-				for (const FieldSet &set : fieldSets) {
-					fieldSet_->addItem(QString::fromStdString(set.name), set.id);
+				{
+					const QSignalBlocker blocker(fieldSet_);
+					fieldSet_->clear();
+					for (const FieldSet &set : fieldSets)
+						fieldSet_->addItem(QString::fromStdString(set.name), set.id);
+					fieldSet_->setCurrentIndex(fieldSet_->findData(chosenSet));
 				}
-				const int index = fieldSet_->findData(previous);
-				if (index >= 0)
-					fieldSet_->setCurrentIndex(index);
 
 				appendLog(tr("Connected. %1 field set(s).").arg(fieldSets.size()), tmd::LogLevel::Good);
-				onReloadFields();
+				if (chosenSet == 0) {
+					appendLog(tr("TM has no field sets for this event yet."), tmd::LogLevel::Warn);
+					return;
+				}
+
+				rebuildFieldRows(fields);
+				appendLog(tr("%1: %2 field(s).").arg(fieldSet_->currentText()).arg(fields.size()),
+					  tmd::LogLevel::Info);
+
+				// Saved explicitly: the picker's own signal was blocked while it
+				// was refilled, and without this the choice lived only on screen.
+				// Nothing was configured, so the live link never started.
+				onSave();
 			},
 			Qt::QueuedConnection);
 	});
