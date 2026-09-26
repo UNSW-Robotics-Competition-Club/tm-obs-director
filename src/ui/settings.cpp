@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "ui/settings.hpp"
 
+#include "tm/tm-types.hpp"
+
 #include <obs-module.h>
 #include <util/platform.h>
 
@@ -140,6 +142,9 @@ bool loadDirectorSettings(DirectorSettings &out)
 
 	out.tmAddress = obs_data_get_string(root.get(), "tmAddress");
 	out.tmApiKey = obs_data_get_string(root.get(), "tmApiKey");
+	// Normalised on the way in too, so an address saved before the dock did it -
+	// "192.168.1.50", say - works without anyone retyping it.
+	out.tmAddress = normalizeTmAddress(out.tmAddress);
 	out.fieldSetId = static_cast<int>(obs_data_get_int(root.get(), "fieldSetId"));
 	out.cerberusEndpoint = obs_data_get_string(root.get(), "cerberusEndpoint");
 	out.matchLogEnabled = obs_data_get_bool(root.get(), "matchLogEnabled");

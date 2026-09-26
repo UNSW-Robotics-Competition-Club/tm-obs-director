@@ -51,9 +51,11 @@ the API key it shows.
 2. **Address** — `http://127.0.0.1` if OBS is on the TM machine, otherwise the TM
    machine's address on the venue network.
 3. **API key** — paste the key from above.
-4. **Test connection.** On success the **Field set** list fills in. Pick the one
-   this stream covers.
-5. The fields for that set appear below as collapsible blocks.
+4. **Test connection.** On success the **Field set** list fills in, the first set
+   is picked (or the one you had before, if TM still has it), and its fields
+   appear below as collapsible blocks. Nothing else to press.
+5. If this stream covers a different field set, pick it; its fields load in
+   place of the first.
 6. Map your scenes (see next section), then press **Save**.
 
 The **Live** section should now show `Link: Connected`.
