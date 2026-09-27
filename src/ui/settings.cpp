@@ -107,6 +107,7 @@ bool saveDirectorSettings(const DirectorSettings &settings)
 	obs_data_set_bool(root.get(), "enabled", settings.rules.enabled);
 	obs_data_set_int(root.get(), "defaultDelayMs", settings.rules.defaultDelayMs);
 	obs_data_set_int(root.get(), "defaultMinHoldMs", settings.rules.defaultMinHoldMs);
+	obs_data_set_string(root.get(), "resultsScene", settings.rules.resultsScene.c_str());
 
 	ObsArrayPtr fields(obs_data_array_create());
 	for (const FieldRule &rule : settings.rules.fields) {
@@ -157,6 +158,7 @@ bool loadDirectorSettings(DirectorSettings &out)
 	out.rules.enabled = obs_data_get_bool(root.get(), "enabled");
 	out.rules.defaultDelayMs = static_cast<int>(obs_data_get_int(root.get(), "defaultDelayMs"));
 	out.rules.defaultMinHoldMs = static_cast<int>(obs_data_get_int(root.get(), "defaultMinHoldMs"));
+	out.rules.resultsScene = obs_data_get_string(root.get(), "resultsScene");
 
 	ObsArrayPtr fields(obs_data_get_array(root.get(), "fields"));
 	if (fields) {

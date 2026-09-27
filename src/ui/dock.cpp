@@ -444,6 +444,18 @@ QWidget *TmDirectorDock::buildRulesGroup()
 	defaultMinHold_ = makeSecondsBox();
 	defaults->addRow(tr("Default delay"), defaultDelay_);
 	defaults->addRow(tr("Default hold"), defaultMinHold_);
+
+	// One for the whole field set, beside the other set-wide defaults, because
+	// TM's results screen is not tied to a field.
+	resultsScene_ = new QComboBox();
+	const QString resultsHelp = tr("Switched to when TM puts the results screen up - but only once the match "
+				       "just played has been saved. Until then TM's results screen shows the "
+				       "match before, so the switch waits (up to 90 s) rather than cut to the "
+				       "wrong score.");
+	resultsScene_->setToolTip(resultsHelp);
+	auto *resultsLabel = new QLabel(tr("Results scene"));
+	resultsLabel->setToolTip(resultsHelp);
+	defaults->addRow(resultsLabel, resultsScene_);
 	body->addLayout(defaults);
 
 	auto *scroll = new QScrollArea();
@@ -564,6 +576,9 @@ void TmDirectorDock::appendLog(const QString &line, tmd::LogLevel level)
 void TmDirectorDock::refreshScenes()
 {
 	sceneNames_ = currentSceneNames();
+
+	if (resultsScene_ != nullptr)
+		populateSceneCombo(resultsScene_, sceneFromCombo(resultsScene_));
 
 	// Each picker keeps its own selection across the repopulate, including a name
 	// OBS no longer has.
@@ -736,6 +751,7 @@ void TmDirectorDock::loadFromSettings()
 	matchLogPath_->setText(QString::fromStdString(settings.matchLogPath));
 	defaultDelay_->setValue(settings.rules.defaultDelayMs / 1000);
 	defaultMinHold_->setValue(settings.rules.defaultMinHoldMs / 1000);
+	populateSceneCombo(resultsScene_, QString::fromStdString(settings.rules.resultsScene));
 
 	// The field set list needs TM, so until Test connection has run there is only the saved id to show.
 	if (fieldSet_->count() == 0 && settings.fieldSetId != 0) {
@@ -772,6 +788,7 @@ DirectorSettings TmDirectorDock::collectSettings() const
 	settings.rules.enabled = enabled_->isChecked();
 	settings.rules.defaultDelayMs = defaultDelay_->value() * 1000;
 	settings.rules.defaultMinHoldMs = defaultMinHold_->value() * 1000;
+	settings.rules.resultsScene = sceneFromCombo(resultsScene_).toStdString();
 
 	settings.rules.fields.clear();
 	for (const FieldRow &row : rows_) {

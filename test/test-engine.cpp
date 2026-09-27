@@ -229,7 +229,73 @@ void testRuleResolution()
 	tmd::TmEvent display;
 	display.type = tmd::TmEventType::AudienceDisplayChanged;
 	display.fieldId = 1;
-	check("audience display is not a trigger", !rules.resolve(display).has_value());
+	check("audience display is not a field trigger", !rules.resolve(display).has_value());
+}
+
+tmd::TmEvent showing(tmd::AudienceDisplay screen)
+{
+	tmd::TmEvent event;
+	event.type = tmd::TmEventType::AudienceDisplayChanged;
+	event.hasDisplay = true;
+	event.display = screen;
+	return event;
+}
+
+void testResultsScene()
+{
+	std::cout << "the results screen\n";
+
+	tmd::RuleSet rules = twoFields();
+	check("no results scene, no switch", !rules.resolve(showing(tmd::AudienceDisplay::Results)).has_value());
+
+	rules.resultsScene = "Results";
+	const auto results = rules.resolve(showing(tmd::AudienceDisplay::Results));
+	check("results screen switches to the results scene", results && results->scene == "Results");
+	check("and is marked for the saved-score check", results && results->results);
+	check("with the default delay", results && results->delayMs == 500);
+	check("other screens do nothing", !rules.resolve(showing(tmd::AudienceDisplay::Rankings)).has_value());
+
+	tmd::TmEvent unparsed;
+	unparsed.type = tmd::TmEventType::AudienceDisplayChanged;
+	check("an unrecognised screen does nothing", !rules.resolve(unparsed).has_value());
+
+	const auto field = rules.resolve(bare(tmd::TmEventType::MatchStarted, 1));
+	check("field triggers are not marked", field && !field->results);
+
+	rules.enabled = false;
+	check("automation off stops it too", !rules.resolve(showing(tmd::AudienceDisplay::Results)).has_value());
+}
+
+tmd::Match qual(int number, const char *state)
+{
+	tmd::Match match;
+	match.tuple.division = 1;
+	match.tuple.round = "QUAL";
+	match.tuple.instance = 1;
+	match.tuple.match = number;
+	match.state = state;
+	return match;
+}
+
+void testResultsSaved()
+{
+	std::cout << "checking the results are for the match just played\n";
+
+	// The failure this exists for: Q11 saved, Q12 played but not yet saved, and
+	// the results screen up - showing Q11.
+	const std::vector<tmd::Match> matches = {qual(11, "SCORED"), qual(12, "UNPLAYED"), qual(13, "UNPLAYED")};
+
+	check("a saved match is saved",
+	      tmd::checkResultsSaved(qual(11, "").tuple, matches) == tmd::ResultsCheck::Saved);
+	check("a played but unsaved match is not",
+	      tmd::checkResultsSaved(qual(12, "").tuple, matches) == tmd::ResultsCheck::NotSaved);
+	check("a match TM does not list is not found",
+	      tmd::checkResultsSaved(qual(40, "").tuple, matches) == tmd::ResultsCheck::NotFound);
+
+	tmd::MatchTuple otherDivision = qual(12, "").tuple;
+	otherDivision.division = 2;
+	check("the whole tuple is compared, not just the number",
+	      tmd::checkResultsSaved(otherDivision, matches) == tmd::ResultsCheck::NotFound);
 }
 
 void testRuleOverrides()
@@ -509,6 +575,8 @@ int main()
 	testStartWithNothingQueued();
 	testIgnoredEvents();
 	testRuleResolution();
+	testResultsScene();
+	testResultsSaved();
 	testRuleOverrides();
 	testDelay();
 	testSupersede();

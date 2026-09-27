@@ -29,8 +29,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QTimer>
 
+#include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <thread>
 #include <vector>
 
 namespace tmd {
@@ -121,6 +125,28 @@ private:
 	void armTimer();
 	void switchScene(const QString &scene);
 
+	/// Hands a results switch to the checker, which holds it until the match
+	/// just played has been saved. Anything submitted since replaces it.
+	void checkResultsThenSwitch(const SceneDecision &decision);
+
+	/// Drops a results switch still waiting on its check.
+	void cancelResultsCheck();
+
+	/// What the checker has to report.
+	enum class ResultsNews {
+		Waiting,  ///< Not saved yet; said once per check.
+		Saved,    ///< Saved: switch now.
+		NotFound, ///< Cannot be checked: switch anyway.
+		GaveUp,   ///< Never saved within the wait: do not switch.
+	};
+
+	/// The checker's report, back on the Qt main thread. Ignored if the check
+	/// has been replaced or cancelled since.
+	void onResultsChecked(uint64_t generation, ResultsNews news, const QString &match, const QString &note);
+
+	/// The checker thread's loop. See resultsJob_.
+	void runResultsChecker();
+
 	/// Writes one finished match to the CSV, if that is switched on.
 	void recordMatch(const MatchLogRow &row);
 
@@ -158,6 +184,31 @@ private:
 	SocketState linkState_ = SocketState::Disconnected;
 	QString linkDetail_;
 	QString lastScene_;
+
+	/// The match that last started - the one whose results should come up next.
+	/// Not the one queued: TM often queues the next match before anyone shows the
+	/// results of this one, and checking that would wait for a match not yet
+	/// played.
+	std::optional<MatchTuple> lastPlayed_;
+
+	/// One long-lived thread for results checks, rather than one per check.
+	/// A check makes blocking HTTP calls, and a thread started per check would
+	/// have to be joined by the next one - on the UI thread, waiting out a
+	/// request. Instead the UI thread only ever posts a job and moves on; a job
+	/// posted while another runs replaces it, and a stale answer is recognised
+	/// by its generation and dropped.
+	struct ResultsJob {
+		uint64_t generation = 0;
+		MatchTuple played;
+		SceneDecision decision;
+	};
+	std::mutex resultsMutex_;
+	std::condition_variable resultsWake_;
+	std::optional<ResultsJob> resultsJob_;        ///< Waiting to be picked up.
+	uint64_t resultsGeneration_ = 0;              ///< The job that counts.
+	std::optional<SceneDecision> resultsPending_; ///< UI thread only.
+	bool resultsQuit_ = false;
+	std::thread resultsThread_;
 };
 
 } // namespace tmd

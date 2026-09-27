@@ -86,10 +86,34 @@ FieldRule &RuleSet::ensureField(int fieldId, const std::string &name)
 	return fields.back();
 }
 
+ResultsCheck checkResultsSaved(const MatchTuple &played, const std::vector<Match> &matches)
+{
+	for (const Match &match : matches) {
+		if (match.tuple == played)
+			return match.isScored() ? ResultsCheck::Saved : ResultsCheck::NotSaved;
+	}
+	return ResultsCheck::NotFound;
+}
+
 std::optional<SceneDecision> RuleSet::resolve(const TmEvent &event) const
 {
 	if (!enabled)
 		return std::nullopt;
+
+	if (event.type == TmEventType::AudienceDisplayChanged) {
+		// Only the results screen. The others either follow the match events
+		// this already switches on (intro, in-match) or are not match moments
+		// at all (rankings, alliance selection), and are left to the operator.
+		if (!event.hasDisplay || event.display != AudienceDisplay::Results || resultsScene.empty())
+			return std::nullopt;
+
+		SceneDecision decision;
+		decision.scene = resultsScene;
+		decision.delayMs = defaultDelayMs;
+		decision.minHoldMs = defaultMinHoldMs;
+		decision.results = true;
+		return decision;
+	}
 
 	Trigger trigger = Trigger::Queued;
 	if (!triggerForEvent(event.type, trigger))

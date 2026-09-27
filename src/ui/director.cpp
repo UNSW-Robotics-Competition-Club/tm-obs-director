@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMetaObject>
 
 #include <algorithm>
+#include <chrono>
 
 namespace tmd {
 
@@ -82,6 +83,8 @@ Director::Director(QObject *parent) : QObject(parent), api_(TmConfig{})
 
 	timer_.setSingleShot(true);
 	connect(&timer_, &QTimer::timeout, this, &Director::pumpScheduler);
+
+	resultsThread_ = std::thread([this]() { runResultsChecker(); });
 }
 
 Director::~Director()
@@ -89,6 +92,13 @@ Director::~Director()
 	// Before anything else: the socket calls handlers that capture `this`, and
 	// stop() joins its thread, so nothing can be in flight after this returns.
 	stop();
+
+	{
+		std::lock_guard<std::mutex> lock(resultsMutex_);
+		resultsQuit_ = true;
+	}
+	resultsWake_.notify_all();
+	resultsThread_.join();
 }
 
 TmConfig Director::tmConfigFor(const DirectorSettings &settings) const
@@ -198,6 +208,7 @@ void Director::stop()
 
 	timer_.stop();
 	scheduler_.reset();
+	cancelResultsCheck();
 	state_ = FieldsetState{};
 	handleSocketState(SocketState::Stopped, QString());
 }
@@ -248,12 +259,33 @@ void Director::handleEvent(const TmEvent &event)
 			recordMatch(*finished);
 	}
 
+	if (event.type == TmEventType::MatchStarted) {
+		if (state_.kind == MatchKind::Match)
+			lastPlayed_ = state_.match;
+		// The next match has begun: results still waiting on the last one's
+		// score would now be a cut away from live play.
+		cancelResultsCheck();
+	} else if (event.type == TmEventType::AudienceDisplayChanged &&
+		   !(event.hasDisplay && event.display == AudienceDisplay::Results)) {
+		// The results screen came down before its score was saved. Switching to
+		// it now would show whatever replaced it.
+		cancelResultsCheck();
+	}
+
 	const auto decision = settings_.rules.resolve(event);
 	if (!decision) {
 		emit activity(describeEvent(event) + tr(" - no rule"), LogLevel::Info);
 		return;
 	}
 
+	if (decision->results) {
+		checkResultsThenSwitch(*decision);
+		return;
+	}
+
+	// Newer than any results switch still waiting on its check, so it wins, as
+	// it would in the scheduler.
+	cancelResultsCheck();
 	scheduler_.submit(*decision, nowMs());
 
 	QString note = describeEvent(event) + tr(" - switching to \"%1\"").arg(QString::fromStdString(decision->scene));
@@ -283,6 +315,176 @@ void Director::pumpScheduler()
 		switchScene(QString::fromStdString(*scene));
 
 	armTimer();
+}
+
+void Director::checkResultsThenSwitch(const SceneDecision &decision)
+{
+	if (!lastPlayed_) {
+		// Nothing to check against, which happens when the plugin connected
+		// after the match started. Switching is what an operator would do by
+		// hand here, so it switches - and says it could not check.
+		emit activity(tr("Results screen up, but no match has started since connecting, so its score "
+				 "cannot be checked - switching anyway"),
+			      LogLevel::Warn);
+		scheduler_.submit(decision, nowMs());
+		armTimer();
+		pumpScheduler();
+		return;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(resultsMutex_);
+		resultsJob_ = ResultsJob{++resultsGeneration_, *lastPlayed_, decision};
+	}
+	resultsPending_ = decision;
+	resultsWake_.notify_all();
+
+	emit activity(
+		tr("Results screen up - checking %1 is saved").arg(QString::fromStdString(shortMatchName(*lastPlayed_))),
+		LogLevel::Info);
+}
+
+void Director::cancelResultsCheck()
+{
+	{
+		std::lock_guard<std::mutex> lock(resultsMutex_);
+		++resultsGeneration_;
+		resultsJob_.reset();
+	}
+	resultsPending_.reset();
+	resultsWake_.notify_all();
+}
+
+void Director::runResultsChecker()
+{
+	using Clock = std::chrono::steady_clock;
+
+	// Long enough for a scorekeeper to finish entering a score, short enough
+	// that a switch arriving after it would not be a surprise cut to results of
+	// a match everyone has stopped thinking about.
+	constexpr auto kGiveUpAfter = std::chrono::seconds(90);
+	constexpr auto kPollEvery = std::chrono::seconds(2);
+
+	std::unique_lock<std::mutex> lock(resultsMutex_);
+	for (;;) {
+		resultsWake_.wait(lock, [this]() { return resultsQuit_ || resultsJob_.has_value(); });
+		if (resultsQuit_)
+			return;
+
+		const ResultsJob job = *resultsJob_;
+		resultsJob_.reset();
+
+		const QString match = QString::fromStdString(shortMatchName(job.played));
+		const auto post = [this, &job, &match](ResultsNews news, const QString &note) {
+			QMetaObject::invokeMethod(
+				this,
+				[this, generation = job.generation, news, match, note]() {
+					onResultsChecked(generation, news, match, note);
+				},
+				Qt::QueuedConnection);
+		};
+
+		const auto giveUpAt = Clock::now() + kGiveUpAfter;
+		bool saidWaiting = false;
+
+		for (;;) {
+			// Unlocked for the request, so the UI thread can post or cancel
+			// without waiting on the network.
+			lock.unlock();
+			TmResult<std::vector<Match>> matches;
+			{
+				std::lock_guard<std::mutex> api(apiMutex_);
+				matches = api_.getMatches(job.played.division);
+			}
+			lock.lock();
+
+			if (resultsQuit_)
+				return;
+			if (resultsGeneration_ != job.generation)
+				break;
+
+			if (matches.error == TmError::None) {
+				const ResultsCheck check = checkResultsSaved(job.played, matches.value);
+				if (check == ResultsCheck::Saved) {
+					post(ResultsNews::Saved, QString());
+					break;
+				}
+				if (check == ResultsCheck::NotFound) {
+					post(ResultsNews::NotFound, QString());
+					break;
+				}
+				if (!saidWaiting) {
+					post(ResultsNews::Waiting, QString());
+					saidWaiting = true;
+				}
+			} else if (!saidWaiting) {
+				// A failed request says nothing about the score, so it is
+				// retried like an unsaved one rather than switched on.
+				post(ResultsNews::Waiting, QString::fromUtf8(tmErrorRemedy(matches.error)));
+				saidWaiting = true;
+			}
+
+			if (Clock::now() >= giveUpAt) {
+				post(ResultsNews::GaveUp, QString());
+				break;
+			}
+
+			resultsWake_.wait_for(lock, kPollEvery, [this, &job]() {
+				return resultsQuit_ || resultsGeneration_ != job.generation;
+			});
+			if (resultsQuit_)
+				return;
+			if (resultsGeneration_ != job.generation)
+				break;
+		}
+	}
+}
+
+void Director::onResultsChecked(uint64_t generation, ResultsNews news, const QString &match, const QString &note)
+{
+	{
+		std::lock_guard<std::mutex> lock(resultsMutex_);
+		if (generation != resultsGeneration_)
+			return;
+	}
+	if (!resultsPending_)
+		return;
+
+	switch (news) {
+	case ResultsNews::Waiting: {
+		QString line = tr("%1 is not saved yet, so the results screen is still showing an earlier match - "
+				  "holding the switch until it is saved")
+				       .arg(match);
+		if (!note.isEmpty())
+			line += QStringLiteral(" (") + note + QStringLiteral(")");
+		emit activity(line, LogLevel::Warn);
+		return;
+	}
+	case ResultsNews::GaveUp:
+		emit activity(tr("%1 was still not saved after 90 s - not switching to results").arg(match),
+			      LogLevel::Warn);
+		resultsPending_.reset();
+		return;
+	case ResultsNews::NotFound:
+		emit activity(
+			tr("%1 is not in TM's match list, so its score cannot be checked - switching anyway").arg(match),
+			LogLevel::Warn);
+		break;
+	case ResultsNews::Saved:
+		emit activity(tr("%1 is saved - switching to results").arg(match), LogLevel::Good);
+		break;
+	}
+
+	const SceneDecision decision = *resultsPending_;
+	resultsPending_.reset();
+
+	// Automation may have been switched off while the check waited.
+	if (!settings_.rules.enabled)
+		return;
+
+	scheduler_.submit(decision, nowMs());
+	armTimer();
+	pumpScheduler();
 }
 
 void Director::switchScene(const QString &scene)
