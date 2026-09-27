@@ -16,7 +16,9 @@ Tournament Manager broadcasts four moments that matter to a stream:
 | `matchStarted` | **Started** | The match timer starts |
 | `matchStopped` | **Stopped** | The timer stops — at the end, or on an abort |
 
-You map each to a scene. TM Director switches OBS when they arrive.
+You map each to a scene. TM Director switches OBS when they arrive. It can also
+switch to a **Results scene** when TM puts the results screen up - see
+[The results screen](#the-results-screen).
 
 It only ever **switches scenes**. It never starts or stops your stream or
 recording, and it never sends anything back to TM — it cannot start, abort or
@@ -73,7 +75,8 @@ Each field is one block:
     Activated       [ (use default) ]
     Started         [ Field 1 Match ]
     Stopped         [ Replay        ]
-    Delay [default]   Hold [default]
+    Delay           [ default       ]
+    Hold            [ default       ]
 ```
 
 **Default scene** is the fallback. Any trigger set to *(use default)* uses it.
@@ -94,6 +97,28 @@ not the whole answer — match graphics on **Started**, a replay on **Stopped**.
 
 Set a field's **Default scene** to *(no switch)* to exclude that field entirely
 without deleting its settings.
+
+### The results screen
+
+**Results scene**, under the default delay and hold, is where to cut when TM puts
+the saved match results on the audience display. It is one scene for the whole
+field set, not one per field, because TM's audience display is not tied to a
+field. Leave it on *(no switch)* to leave results to the operator.
+
+It will not cut to the wrong score. TM's results screen shows the most recently
+*saved* match, so if it goes up before the match just played has been saved, it
+is showing the match before. TM Director checks first:
+
+- **Saved** → it switches, after the default delay.
+- **Not saved yet** → it holds, says so in the log (amber), and checks again
+  every two seconds. It switches the moment the score is saved.
+- **Still not saved after 90 seconds**, the results screen taken down, or the
+  next match started → it gives up and does not switch.
+- **It cannot tell** - the plugin connected mid-match, or TM does not list the
+  match → it switches anyway, and says it could not check.
+
+This protects the **stream**. The results screen at the venue still shows
+whatever TM shows; TM Director does not control it.
 
 ---
 
@@ -190,9 +215,13 @@ These are properties of TM's API, not things left unfinished:
   countdown.
 - **One field set per OBS instance.** An event streaming two divisions separately
   needs an OBS instance per stream.
-- **The audience display is not a trigger.** It changes whenever anyone touches
-  it, including in response to our own switching, so wiring it to scenes would
-  risk a loop.
+- **Only the results screen is a trigger.** The other audience display screens
+  either follow match events that already switch (intro, in-match) or are not
+  match moments at all (rankings, alliance selection), so they are left to the
+  operator.
+- **It cannot fix the venue's results screen.** When TM shows an older match's
+  results, TM Director holds the stream's switch but cannot make TM redraw the
+  screen with the right match.
 
 ---
 

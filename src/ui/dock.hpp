@@ -174,6 +174,7 @@ private:
 
 	QSpinBox *defaultDelay_ = nullptr;
 	QSpinBox *defaultMinHold_ = nullptr;
+	QComboBox *resultsScene_ = nullptr;
 	QVBoxLayout *fieldsLayout_ = nullptr;
 	QToolButton *collapseAll_ = nullptr;
 

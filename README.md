@@ -11,6 +11,8 @@ operator otherwise does by hand happens on its own.
   `matchStopped` — one field set, any number of fields.
 - **Per field**: one scene, with a per-trigger override where the field's camera
   is not the whole answer.
+- **Results**: a scene for TM's results screen, held until the match just played
+  has actually been saved, so the stream never cuts to the previous match's score.
 - **Timing**: a delay before switching, and a minimum hold afterwards, so a
   stream does not lurch through four scenes in the seconds around a match start.
 - **Automation on/off**, prominently, so an operator can take manual control

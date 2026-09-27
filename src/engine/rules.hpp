@@ -27,12 +27,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace tmd {
 
-/// The four moments an operator switches on.
+/// The four per-field moments an operator switches on.
 ///
-/// TM sends a fifth event, audienceDisplayChanged, which is deliberately not a
-/// trigger: it fires whenever anyone touches the audience display, including in
-/// response to our own switching, and wiring it to a scene change invites a
-/// loop.
+/// TM's fifth event, audienceDisplayChanged, is not one of these: the audience
+/// display belongs to the field set, not to a field, so it cannot be mapped per
+/// field. Its one useful moment - the results screen going up - is handled by
+/// RuleSet::resultsScene instead.
 enum class Trigger {
 	Queued,    ///< fieldMatchAssigned - a match is on deck for this field.
 	Activated, ///< fieldActivated - this field is the one on the audience display.
@@ -78,7 +78,23 @@ struct SceneDecision {
 	int minHoldMs = 0;
 	Trigger trigger = Trigger::Queued;
 	int fieldId = 0;
+
+	/// The results screen went up. Not switched straight away: the caller first
+	/// checks the match just played has actually been saved, because TM's
+	/// results screen shows the most recently saved match, and until this one is
+	/// saved that is the one before it.
+	bool results = false;
 };
+
+/// Whether TM has saved the score of `played`.
+enum class ResultsCheck {
+	Saved,    ///< Its results are the ones on screen.
+	NotSaved, ///< Not yet: the results screen is showing an older match.
+	NotFound, ///< Not in the list at all, so it cannot be checked either way.
+};
+
+/// Looks `played` up in a division's match list.
+ResultsCheck checkResultsSaved(const MatchTuple &played, const std::vector<Match> &matches);
 
 struct RuleSet {
 	/// Master switch. An operator taking manual control mid-match must be able to
@@ -87,6 +103,11 @@ struct RuleSet {
 
 	int defaultDelayMs = 0;
 	int defaultMinHoldMs = 0;
+
+	/// Where to switch when TM puts the results screen up. One scene for the
+	/// whole field set, since the audience display is not tied to a field. Empty
+	/// means no switch. Uses the default delay and hold.
+	std::string resultsScene;
 
 	std::vector<FieldRule> fields;
 
