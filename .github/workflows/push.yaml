@@ -88,6 +88,18 @@ jobs:
             done
           done
 
+      - name: Extract Windows Plugin 🧩
+        if: fromJSON(steps.check.outputs.validTag)
+        run: |
+          : Extract Windows Plugin 🧩
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+          shopt -s nullglob
+
+          # The bare DLL, for dropping straight into obs-plugins/64bit.
+          for archive in *-windows-x64.zip; do
+            unzip -j -o "${archive}" '*.dll' -d "${{ github.workspace }}"
+          done
+
       - name: Generate Checksums 🪪
         if: fromJSON(steps.check.outputs.validTag)
         run: |
@@ -96,7 +108,7 @@ jobs:
           shopt -s extglob
 
           echo "### Checksums" > ${{ github.workspace }}/CHECKSUMS.txt
-          for file in ${{ github.workspace }}/@(*.exe|*.deb|*.ddeb|*.pkg|*.tar.xz|*.zip); do
+          for file in ${{ github.workspace }}/@(*.exe|*.dll|*.deb|*.ddeb|*.pkg|*.tar.xz|*.zip); do
             echo "    ${file##*/}: $(sha256sum "${file}" | cut -d " " -f 1)" >> ${{ github.workspace }}/CHECKSUMS.txt
           done
 
@@ -112,6 +124,7 @@ jobs:
           body_path: ${{ github.workspace }}/CHECKSUMS.txt
           files: |
             ${{ github.workspace }}/*.exe
+            ${{ github.workspace }}/*.dll
             ${{ github.workspace }}/*.zip
             ${{ github.workspace }}/*.pkg
             ${{ github.workspace }}/*.deb
