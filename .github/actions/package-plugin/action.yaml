@@ -123,10 +123,30 @@ runs:
         # GitHub's Windows images ship Inno Setup, so this costs a build step and
         # no new dependency; CMake skips the target when ISCC is absent, which is
         # why a local build without Inno Setup still works.
-        $Iscc = Get-Command ISCC -ErrorAction SilentlyContinue
+        #
+        # The DLL comes from the install tree the zip is made from, not from the
+        # CMake 'installer' target: that target builds its own RelWithDebInfo
+        # copy, so a tagged Release build would ship two different DLLs, and
+        # only this one is the one that was signed. The staging layout is the
+        # one the target uses, since the configured .iss points at it.
+        $Iscc = (Get-Command ISCC -ErrorAction SilentlyContinue).Source
         if ( $null -eq $Iscc ) {
+          $Iscc = "${Env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        }
+        if ( ! ( Test-Path $Iscc ) ) {
           Write-Warning 'Inno Setup (ISCC) not found on this runner; skipping the installer.'
           exit 0
         }
 
-        cmake --build --preset windows-ci-x64 --target installer
+        $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
+        $Name = $BuildSpec.name
+        $Dll = "release/${{ inputs.config }}/${Name}/bin/64bit/${Name}.dll"
+        $Stage = "build_x64/installer-stage/${Name}"
+
+        Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force "${Stage}/bin/64bit" | Out-Null
+        Copy-Item -Recurse data "${Stage}/data"
+        Copy-Item $Dll "${Stage}/bin/64bit/${Name}.dll"
+
+        & $Iscc build_x64/installer-Windows.iss
+        if ( $LASTEXITCODE ) { throw "ISCC failed with exit code ${LASTEXITCODE}" }

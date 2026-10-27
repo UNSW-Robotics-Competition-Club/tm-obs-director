@@ -295,12 +295,117 @@ jobs:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
 
+      - name: Check SignPath 🔏
+        id: signpath
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          # Check SignPath 🔏
+          #
+          # Only tags are signed. SignPath Foundation's release certificate
+          # needs an approver to accept each request by hand, so signing every
+          # push would leave every build waiting on a person. A tag without the
+          # token still builds and releases, unsigned, with a warning.
+          $Enabled = ( '${{ github.ref_type }}' -eq 'tag' ) -and ! [string]::IsNullOrEmpty( $Env:SIGNPATH_API_TOKEN )
+          if ( ( '${{ github.ref_type }}' -eq 'tag' ) -and ! $Enabled ) {
+            Write-Output '::warning::No SIGNPATH_API_TOKEN secret: this release is unsigned.'
+          }
+          "enabled=$( $Enabled.ToString().ToLower() )" >> $env:GITHUB_OUTPUT
+
+      # The DLL is signed before anything is packed around it, so the zip, the
+      # bare DLL on the release and the copy inside the installer are one file.
+      - name: Upload Unsigned Plugin 📤
+        id: unsigned-plugin
+        if: fromJSON(steps.signpath.outputs.enabled)
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-plugin
+          path: ${{ github.workspace }}/release/${{ needs.check-event.outputs.config }}/${{ steps.setup.outputs.pluginName }}/bin/64bit/${{ steps.setup.outputs.pluginName }}.dll
+          retention-days: 1
+
+      - name: Sign Plugin 🔏
+        if: fromJSON(steps.signpath.outputs.enabled)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'tm-obs-director' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: plugin-dll
+          github-artifact-id: ${{ steps.unsigned-plugin.outputs.artifact-id }}
+          wait-for-completion: true
+          # Long enough for an approver to see the request and accept it.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signed-plugin
+
+      - name: Replace Unsigned Plugin 🔁
+        if: fromJSON(steps.signpath.outputs.enabled)
+        run: |
+          # Replace Unsigned Plugin 🔁
+          # Back into the install tree it came from, which is what gets packed.
+          $Name = '${{ steps.setup.outputs.pluginName }}'
+          Move-Item -Force "${{ runner.temp }}/signed-plugin/${Name}.dll" `
+            "release/${{ needs.check-event.outputs.config }}/${Name}/bin/64bit/${Name}.dll"
+
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
         with:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
+
+      - name: Upload Unsigned Installer 📤
+        id: unsigned-installer
+        if: fromJSON(steps.signpath.outputs.enabled)
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-installer
+          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-installer.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign Installer 🔏
+        if: fromJSON(steps.signpath.outputs.enabled)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'tm-obs-director' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signed-installer
+
+      - name: Replace Unsigned Installer 🔁
+        if: fromJSON(steps.signpath.outputs.enabled)
+        run: |
+          # Replace Unsigned Installer 🔁
+          $Installer = '${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-installer.exe'
+          Move-Item -Force "${{ runner.temp }}/signed-installer/${Installer}" "release/${Installer}"
+
+      - name: Verify Signatures 🔍
+        if: fromJSON(steps.signpath.outputs.enabled)
+        run: |
+          # Verify Signatures 🔍
+          #
+          # A release that says it is signed and is not would be worse than one
+          # that is honestly unsigned, so check the files that actually ship.
+          $Config = '${{ needs.check-event.outputs.config }}'
+          $Name = '${{ steps.setup.outputs.pluginName }}'
+          $Files = @(
+            "release/${Config}/${Name}/bin/64bit/${Name}.dll"
+            "build_x64/installer-stage/${Name}/bin/64bit/${Name}.dll"
+            "release/${Name}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-installer.exe"
+          )
+          foreach ( $File in $Files ) {
+            $Signature = Get-AuthenticodeSignature $File
+            if ( $Signature.Status -ne 'Valid' ) {
+              throw "${File} is not validly signed: $($Signature.Status) $($Signature.StatusMessage)"
+            }
+            Write-Output "${File}: $($Signature.SignerCertificate.Subject)"
+          }
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4

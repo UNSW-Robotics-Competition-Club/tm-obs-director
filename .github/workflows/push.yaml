@@ -24,6 +24,8 @@ jobs:
     secrets: inherit
     permissions:
       contents: read
+      # SignPath fetches the unsigned files from this run's artifacts.
+      actions: read
 
   create-release:
     name: Create Release 🛫

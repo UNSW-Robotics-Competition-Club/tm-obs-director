@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "installer".
+
+  SignPath keeps artifact configurations on its side; this copy is the source
+  for the one entered there. Change both together.
+
+  Only the outer setup executable is signed. The DLL inside it was signed by
+  "plugin-dll" before Inno Setup packed it, which SignPath cannot do from out
+  here: it does not open Inno Setup installers.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="tm-obs-director-*-windows-x64-installer.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

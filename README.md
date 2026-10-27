@@ -83,6 +83,10 @@ Produces `release/tm-obs-director-<version>-windows-x64-installer.exe`. Needs
 not offered and everything else still builds. CI builds it on every Windows run,
 so a tagged release carries one without anyone installing Inno Setup locally.
 
+Tagged releases are code signed through SignPath: the DLL first, then the
+installer built around it. See the [code signing policy](docs/code-signing-policy.md).
+Untagged builds are not signed.
+
 The installer puts the plugin where OBS actually reads it, removes the folder
 from the plugin's previous name so two copies cannot both load, refuses to run
 while OBS has the DLL open, and leaves settings alone.
@@ -133,3 +137,6 @@ without a running OBS.
 ## Licence
 
 GPL-2.0-or-later. See [LICENSE](LICENSE).
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/).
